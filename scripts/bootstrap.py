@@ -635,6 +635,19 @@ def format_check() -> None:
 
 
 def lint() -> None:
+    # Automatically fix safe Ruff issues first.
+    run(
+        [
+            "uv",
+            "run",
+            "ruff",
+            "check",
+            ".",
+            "--fix",
+        ]
+    )
+
+    # Then verify that nothing remains.
     run(
         [
             "uv",
@@ -644,6 +657,7 @@ def lint() -> None:
             ".",
         ]
     )
+
 
 
 def typecheck() -> None:
