@@ -1,9 +1,8 @@
-name: Bootstrap and CI
+name: Agentic Platform CI
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -11,32 +10,40 @@ permissions:
   contents: write
 
 jobs:
-  bootstrap:
+  build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
-      - name: Setup Python
+      - name: Python
         uses: actions/setup-python@v6
         with:
           python-version: "3.13"
 
-      - name: Run project generator
+      - name: Bootstrap project
         run: python scripts/bootstrap.py
 
-      - name: Setup uv
+      - name: Verify
+        run: |
+          test -f pyproject.toml
+          test -f README.md
+          test -f .env.example
+          test -d src/agent_platform
+          echo "Project generated successfully."
+
+      - name: uv
         uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
 
-      - name: Install dependencies
+      - name: Install
         run: uv sync
 
-      - name: Format check
+      - name: Format
         run: uv run ruff format --check .
 
       - name: Lint
@@ -51,7 +58,8 @@ jobs:
       - name: Evaluations
         run: uv run python -m agent_platform.evaluations.runner
 
-      - name: Commit generated project
+      - name: Commit generated files
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -59,8 +67,8 @@ jobs:
           git add .
 
           if git diff --cached --quiet; then
-            echo "No generated changes to commit."
+            echo "Nothing to commit."
           else
-            git commit -m "chore: bootstrap project"
+            git commit -m "chore: bootstrap agent platform"
             git push
           fi
