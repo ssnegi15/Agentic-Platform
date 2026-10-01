@@ -1,0 +1,51 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agent-platform"
+version = "0.1.0"
+description = "An open-source, GitHub-first AI agent platform"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+  "alembic>=1.16,<2",
+  "asyncpg>=0.30,<1",
+  "fastapi>=0.115,<1",
+  "httpx>=0.28,<1",
+  "jsonschema>=4.23,<5",
+  "pgvector>=0.4,<1",
+  "pydantic-settings>=2.10,<3",
+  "PyJWT[crypto]>=2.10,<3",
+  "sqlalchemy[asyncio]>=2.0,<3",
+  "uvicorn[standard]>=0.35,<1",
+]
+
+[dependency-groups]
+dev = [
+  "httpx>=0.28,<1",
+  "mypy>=1.18,<2",
+  "pytest>=8,<10",
+  "pytest-asyncio>=1,<2",
+  "ruff>=0.14,<1",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agent_platform"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+mypy_path = "src"
+plugins = ["pydantic.mypy"]

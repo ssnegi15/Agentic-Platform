@@ -1,4 +1,4 @@
-name: Agentic Platform CI
+name: Agent Platform CI
 
 on:
   push:
@@ -7,101 +7,37 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  build:
+  quality:
     runs-on: ubuntu-latest
-
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: agent_platform
+          POSTGRES_USER: agent_platform
+          POSTGRES_PASSWORD: agent_platform
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U agent_platform -d agent_platform"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://agent_platform:agent_platform@localhost:5432/agent_platform
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: Setup Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.13"
-
-      - name: Run bootstrap
-        run: |
-          python scripts/bootstrap.py
-
-      - name: Show generated project
-        run: |
-          echo "===== PROJECT ====="
-          find . -maxdepth 4 -type f | sort
-          echo "==================="
-
-      - name: Verify bootstrap
-        run: |
-          if [ ! -f "./pyproject.toml" ]; then
-            echo "::error::bootstrap.py did not create pyproject.toml"
-            echo "Repository root:"
-            pwd
-            echo "Files:"
-            find . -maxdepth 3 -type f | sort
-            exit 1
-          fi
-
-          if [ ! -f "./README.md" ]; then
-            echo "::error::bootstrap.py did not create README.md"
-            exit 1
-          fi
-
-          if [ ! -f "./.env.example" ]; then
-            echo "::error::bootstrap.py did not create .env.example"
-            exit 1
-          fi
-
-          if [ ! -d "./src/agent_platform" ]; then
-            echo "::error::bootstrap.py did not create src/agent_platform"
-            exit 1
-          fi
-
-          echo "Bootstrap verification passed."
-
-      - name: Setup uv
-        uses: astral-sh/setup-uv@v7
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
-
+      - name: Set up Python
+        run: uv python install 3.13
       - name: Install dependencies
-        run: |
-          uv sync
-
-      - name: Format
-        run: |
-          uv run ruff format --check .
-
-      - name: Lint
-        run: |
-          uv run ruff check .
-
-      - name: Type check
-        run: |
-          uv run mypy src
-
-      - name: Tests
-        run: |
-          uv run pytest
-
-      - name: Evaluations
-        run: |
-          uv run python -m agent_platform.evaluations.runner
-
-      - name: Commit generated project
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          git add .
-
-          if git diff --cached --quiet; then
-            echo "No generated changes."
-          else
-            git commit -m "chore: generate agent platform"
-            git push
-          fi
+        run: uv sync --dev
+      - name: Apply database migrations
+        run: uv run python scripts/bootstrap.py migrate
+      - name: Run local CI checks
+        run: uv run python scripts/bootstrap.py ci
