@@ -19,46 +19,79 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Python
+      - name: Setup Python
         uses: actions/setup-python@v6
         with:
           python-version: "3.13"
 
-      - name: Bootstrap project
-        run: python scripts/bootstrap.py
-
-      - name: Verify
+      - name: Run bootstrap
         run: |
-          test -f pyproject.toml
-          test -f README.md
-          test -f .env.example
-          test -d src/agent_platform
-          echo "Project generated successfully."
+          python bootstrap.py
 
-      - name: uv
+      - name: Show generated project
+        run: |
+          echo "===== PROJECT ====="
+          find . -maxdepth 4 -type f | sort
+          echo "==================="
+
+      - name: Verify bootstrap
+        run: |
+          if [ ! -f "./pyproject.toml" ]; then
+            echo "::error::bootstrap.py did not create pyproject.toml"
+            echo "Repository root:"
+            pwd
+            echo "Files:"
+            find . -maxdepth 3 -type f | sort
+            exit 1
+          fi
+
+          if [ ! -f "./README.md" ]; then
+            echo "::error::bootstrap.py did not create README.md"
+            exit 1
+          fi
+
+          if [ ! -f "./.env.example" ]; then
+            echo "::error::bootstrap.py did not create .env.example"
+            exit 1
+          fi
+
+          if [ ! -d "./src/agent_platform" ]; then
+            echo "::error::bootstrap.py did not create src/agent_platform"
+            exit 1
+          fi
+
+          echo "Bootstrap verification passed."
+
+      - name: Setup uv
         uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
 
-      - name: Install
-        run: uv sync
+      - name: Install dependencies
+        run: |
+          uv sync
 
       - name: Format
-        run: uv run ruff format --check .
+        run: |
+          uv run ruff format --check .
 
       - name: Lint
-        run: uv run ruff check .
+        run: |
+          uv run ruff check .
 
       - name: Type check
-        run: uv run mypy src
+        run: |
+          uv run mypy src
 
       - name: Tests
-        run: uv run pytest
+        run: |
+          uv run pytest
 
       - name: Evaluations
-        run: uv run python -m agent_platform.evaluations.runner
+        run: |
+          uv run python -m agent_platform.evaluations.runner
 
-      - name: Commit generated files
+      - name: Commit generated project
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           git config user.name "github-actions[bot]"
@@ -67,8 +100,8 @@ jobs:
           git add .
 
           if git diff --cached --quiet; then
-            echo "Nothing to commit."
+            echo "No generated changes."
           else
-            git commit -m "chore: bootstrap agent platform"
+            git commit -m "chore: generate agent platform"
             git push
           fi
