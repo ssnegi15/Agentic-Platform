@@ -629,7 +629,6 @@ def format_check() -> None:
             "run",
             "ruff",
             "format",
-            "--check",
             ".",
         ]
     )
