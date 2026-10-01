@@ -26,7 +26,7 @@ jobs:
 
       - name: Run bootstrap
         run: |
-          python bootstrap.py
+          python scripts/bootstrap.py
 
       - name: Show generated project
         run: |
