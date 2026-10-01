@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -114,10 +116,10 @@ strict = true
 
 Open-source, GitHub-first AI agent platform.
 
-Architecture:
+## Stack
 
+- Python 3.13
 - FastAPI
-- plain Python agents
 - PostgreSQL
 - pgvector
 - Keycloak/OIDC
@@ -125,592 +127,706 @@ Architecture:
 - PostgreSQL telemetry
 - built-in evaluations
 - GitHub Actions
-- dashboard
 
-No Azure AI Foundry, Firebase Auth, Ollama, Jaeger, Langfuse,
-LangSmith, Redis, Kafka, Kubernetes, or Docker Compose is required.
+The platform does not require Azure AI Foundry, Firebase Auth,
+Ollama, Jaeger, Langfuse, LangSmith, Redis, Kafka, Kubernetes,
+or Docker Compose.
 
-Run:
+## Bootstrap
 
-    python scripts/bootstrap.py
+The project is intentionally bootstrapped through one script:
 
-Configuration and secrets are intentionally deferred.
+```bash
+python scripts/bootstrap.py
+
+
+No secrets are required for the initial bootstrap.
+
+External services can be configured later through environment
+variables or GitHub Actions secrets/variables.
 """.lstrip(),
 
-    "src/agent_platform/__init__.py": r"""
-__version__ = "0.1.0"
+"src/agent_platform/__init__.py": r"""
+
+
+version = "0.1.0"
 """.lstrip(),
 
-    "src/agent_platform/config/__init__.py": "",
+"src/agent_platform/config/__init__.py": "",
 
-    "src/agent_platform/config/settings.py": r"""
+"src/agent_platform/config/settings.py": r"""
+
+
 from functools import lru_cache
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 class Settings(BaseSettings):
-    app_name: str = "agent-platform"
-    environment: str = "development"
-    application_version: str = "0.1.0"
+app_name: str = "agent-platform"
+environment: str = "development"
+application_version: str = "0.1.0"
 
-    database_url: str = (
-        "postgresql+psycopg://postgres:postgres"
-        "@localhost:5432/agent_platform"
-    )
+database_url: str = (
+    "postgresql+psycopg://postgres:postgres"
+    "@localhost:5432/agent_platform"
+)
 
-    oidc_issuer_url: str | None = None
-    oidc_audience: str | None = None
-    oidc_client_id: str | None = None
+oidc_issuer_url: str | None = None
+oidc_audience: str | None = None
+oidc_client_id: str | None = None
 
-    llm_provider: str = "openai-compatible"
-    llm_base_url: str | None = None
-    llm_api_key: str | None = None
-    llm_default_model: str | None = None
+llm_provider: str = "openai-compatible"
+llm_base_url: str | None = None
+llm_api_key: str | None = None
+llm_default_model: str | None = None
 
-    telemetry_enabled: bool = True
-    telemetry_capture_inputs: bool = False
-    telemetry_capture_outputs: bool = False
+telemetry_enabled: bool = True
+telemetry_capture_inputs: bool = False
+telemetry_capture_outputs: bool = False
 
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        extra="ignore",
-    )
+model_config = SettingsConfigDict(
+    env_file=".env",
+    env_file_encoding="utf-8",
+    extra="ignore",
+)
 
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+return Settings()
 """.lstrip(),
 
-    "src/agent_platform/api/__init__.py": "",
+"src/agent_platform/api/__init__.py": "",
 
-    "src/agent_platform/api/main.py": r"""
+"src/agent_platform/api/main.py": r"""
+
+
 from fastapi import FastAPI
-from agent_platform import __version__
-from agent_platform.config.settings import get_settings
 
+from agent_platform import version
+from agent_platform.config.settings import get_settings
 
 settings = get_settings()
 
 app = FastAPI(
-    title=settings.app_name,
-    version=__version__,
+title=settings.app_name,
+version=version,
 )
-
 
 @app.get("/health")
 async def health() -> dict[str, str]:
-    return {
-        "status": "ok",
-        "version": __version__,
-    }
+return {
+"status": "ok",
+"version": version,
+}
+
+@app.get("/ready")
+async def ready() -> dict[str, str]:
+return {
+"status": "ready",
+}
 """.lstrip(),
 
-    "src/agent_platform/agents/__init__.py": "",
+"src/agent_platform/agents/__init__.py": "",
 
-    "src/agent_platform/agents/runtime.py": r"""
+"src/agent_platform/agents/runtime.py": r"""
+
+
 from dataclasses import dataclass, field
 from typing import Any
 
-
 @dataclass
 class AgentRequest:
-    message: str
-    user_id: str | None = None
-    session_id: str | None = None
-    metadata: dict[str, Any] = field(default_factory=dict)
-
+message: str
+user_id: str | None = None
+session_id: str | None = None
+metadata: dict[str, Any] = field(default_factory=dict)
 
 @dataclass
 class AgentResponse:
-    message: str
-    metadata: dict[str, Any] = field(default_factory=dict)
-
+message: str
+metadata: dict[str, Any] = field(default_factory=dict)
 
 class Agent:
-    name = "default"
+name = "default"
 
-    async def run(
-        self,
-        request: AgentRequest,
-    ) -> AgentResponse:
-        return AgentResponse(
-            message="Agent runtime ready.",
-            metadata={"agent": self.name},
-        )
+async def run(
+    self,
+    request: AgentRequest,
+) -> AgentResponse:
+    return AgentResponse(
+        message="Agent runtime ready.",
+        metadata={
+            "agent": self.name,
+        },
+    )
+
+
 """.lstrip(),
 
-    "src/agent_platform/llm/__init__.py": "",
+"src/agent_platform/llm/__init__.py": r"""
 
-    "src/agent_platform/llm/base.py": r"""
+
+from agent_platform.llm.base import (
+LLMMessage,
+LLMProvider,
+LLMRequest,
+LLMResponse,
+TokenUsage,
+)
+
+all = [
+"LLMMessage",
+"LLMProvider",
+"LLMRequest",
+"LLMResponse",
+"TokenUsage",
+]
+""".lstrip(),
+
+"src/agent_platform/llm/base.py": r"""
+
+
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-
 @dataclass
 class LLMMessage:
-    role: str
-    content: str
-
+role: str
+content: str
 
 @dataclass
 class TokenUsage:
-    input_tokens: int = 0
-    output_tokens: int = 0
+input_tokens: int = 0
+output_tokens: int = 0
 
-    @property
-    def total_tokens(self) -> int:
-        return self.input_tokens + self.output_tokens
+@property
+def total_tokens(self) -> int:
+    return self.input_tokens + self.output_tokens
 
 
 @dataclass
 class LLMRequest:
-    model: str
-    messages: list[LLMMessage]
-    temperature: float | None = None
-    metadata: dict[str, Any] = field(default_factory=dict)
-
+model: str
+messages: list[LLMMessage]
+temperature: float | None = None
+metadata: dict[str, Any] = field(default_factory=dict)
 
 @dataclass
 class LLMResponse:
-    model: str
-    content: str
-    usage: TokenUsage
-    latency_ms: float
-    estimated_cost: float | None = None
-    metadata: dict[str, Any] = field(default_factory=dict)
-
+model: str
+content: str
+usage: TokenUsage
+latency_ms: float
+estimated_cost: float | None = None
+metadata: dict[str, Any] = field(default_factory=dict)
 
 class LLMProvider(Protocol):
-    async def complete(
-        self,
-        request: LLMRequest,
-    ) -> LLMResponse:
-        ...
+async def complete(
+self,
+request: LLMRequest,
+) -> LLMResponse:
+...
 """.lstrip(),
 
-    "src/agent_platform/telemetry/__init__.py": "",
+"src/agent_platform/telemetry/__init__.py": r"""
 
-    "src/agent_platform/telemetry/base.py": r"""
+
+from agent_platform.telemetry.base import Span, Telemetry, Trace
+
+all = [
+"Span",
+"Telemetry",
+"Trace",
+]
+""".lstrip(),
+
+"src/agent_platform/telemetry/base.py": r"""
+
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Protocol
-
 
 @dataclass
 class Trace:
-    trace_id: str
-    user_id: str | None
-    session_id: str | None
-    agent: str
-    workflow: str | None
-    environment: str
-    application_version: str
-    started_at: datetime
-    ended_at: datetime | None = None
-    status: str = "running"
-    error: str | None = None
-
+trace_id: str
+user_id: str | None
+session_id: str | None
+agent: str
+workflow: str | None
+environment: str
+application_version: str
+started_at: datetime
+ended_at: datetime | None = None
+status: str = "running"
+error: str | None = None
 
 @dataclass
 class Span:
-    span_id: str
-    trace_id: str
-    parent_span_id: str | None
-    span_type: str
-    name: str
-    started_at: datetime
-    ended_at: datetime | None = None
-    status: str = "running"
-    metadata: dict[str, Any] = field(default_factory=dict)
-
+span_id: str
+trace_id: str
+parent_span_id: str | None
+span_type: str
+name: str
+started_at: datetime
+ended_at: datetime | None = None
+status: str = "running"
+metadata: dict[str, Any] = field(default_factory=dict)
 
 class Telemetry(Protocol):
-    async def start_trace(self, trace: Trace) -> None:
-        ...
+async def start_trace(self, trace: Trace) -> None:
+...
 
-    async def finish_trace(
-        self,
-        trace_id: str,
-        status: str,
-        error: str | None = None,
-    ) -> None:
-        ...
+async def finish_trace(
+    self,
+    trace_id: str,
+    status: str,
+    error: str | None = None,
+) -> None:
+    ...
 
-    async def record_span(self, span: Span) -> None:
-        ...
+async def record_span(self, span: Span) -> None:
+    ...
+
+
 """.lstrip(),
 
-    "src/agent_platform/evaluations/__init__.py": "",
+"src/agent_platform/evaluations/__init__.py": "",
 
-    "src/agent_platform/evaluations/base.py": r"""
+"src/agent_platform/evaluations/base.py": r"""
+
+
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-
 @dataclass
 class EvaluationCase:
-    case_id: str
-    input: Any
-    expected_output: Any = None
-    metadata: dict[str, Any] = field(default_factory=dict)
-
+case_id: str
+input: Any
+expected_output: Any = None
+metadata: dict[str, Any] = field(default_factory=dict)
 
 @dataclass
 class EvaluationResult:
-    evaluator: str
-    score: float
-    passed: bool
-    reason: str | None = None
-
+evaluator: str
+score: float
+passed: bool
+reason: str | None = None
 
 class Evaluator(Protocol):
-    name: str
+name: str
 
-    async def evaluate(
-        self,
-        case: EvaluationCase,
-        actual_output: Any,
-    ) -> EvaluationResult:
-        ...
+async def evaluate(
+    self,
+    case: EvaluationCase,
+    actual_output: Any,
+) -> EvaluationResult:
+    ...
+
+
 """.lstrip(),
 
-    "src/agent_platform/evaluations/runner.py": r"""
+"src/agent_platform/evaluations/runner.py": r"""
+
+
 def main() -> int:
-    print("Evaluation framework ready; no datasets configured.")
-    return 0
+print("Evaluation framework ready; no datasets configured.")
+return 0
 
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+if name == "main":
+raise SystemExit(main())
 """.lstrip(),
 
-    "src/agent_platform/pricing/__init__.py": "",
+"src/agent_platform/pricing/__init__.py": "",
 
-    "src/agent_platform/pricing/models.py": r"""
+"src/agent_platform/pricing/models.py": r"""
+
+
 from dataclasses import dataclass
 from datetime import datetime
 
-
 @dataclass(frozen=True)
 class ModelPricing:
-    provider: str
-    model: str
-    input_cost_per_1m_tokens: float
-    output_cost_per_1m_tokens: float
-    effective_from: datetime
-    effective_until: datetime | None = None
-
+provider: str
+model: str
+input_cost_per_1m_tokens: float
+output_cost_per_1m_tokens: float
+effective_from: datetime
+effective_until: datetime | None = None
 
 def estimate_cost(
-    pricing: ModelPricing,
-    input_tokens: int,
-    output_tokens: int,
+pricing: ModelPricing,
+input_tokens: int,
+output_tokens: int,
 ) -> float:
-    return (
-        input_tokens / 1_000_000
-    ) * pricing.input_cost_per_1m_tokens + (
-        output_tokens / 1_000_000
-    ) * pricing.output_cost_per_1m_tokens
+input_cost = (
+input_tokens / 1_000_000
+) * pricing.input_cost_per_1m_tokens
+
+output_cost = (
+    output_tokens / 1_000_000
+) * pricing.output_cost_per_1m_tokens
+
+return input_cost + output_cost
+
+
 """.lstrip(),
 
-    "src/agent_platform/db/__init__.py": "",
-    "src/agent_platform/db/models/__init__.py": "",
+"src/agent_platform/db/__init__.py": "",
+"src/agent_platform/db/models/__init__.py": "",
 
-    "tests/unit/test_health.py": r"""
+"tests/unit/test_health.py": r"""
+
+
 from fastapi.testclient import TestClient
+
 from agent_platform.api.main import app
 
-
 def test_health() -> None:
-    response = TestClient(app).get("/health")
-    assert response.status_code == 200
-    assert response.json()["status"] == "ok"
+response = TestClient(app).get("/health")
+
+assert response.status_code == 200
+assert response.json()["status"] == "ok"
+
+
 """.lstrip(),
 
-    "tests/unit/test_llm.py": r"""
+"tests/unit/test_llm.py": r"""
+
+
 from agent_platform.llm.base import TokenUsage
 
-
 def test_token_usage() -> None:
-    usage = TokenUsage(input_tokens=10, output_tokens=20)
-    assert usage.total_tokens == 30
+usage = TokenUsage(
+input_tokens=10,
+output_tokens=20,
+)
+
+assert usage.total_tokens == 30
+
+
 """.lstrip(),
 
-    "tests/unit/test_evaluations.py": r"""
+"tests/unit/test_evaluations.py": r"""
+
+
 from agent_platform.evaluations.base import EvaluationCase
 
-
 def test_evaluation_case() -> None:
-    case = EvaluationCase(
-        case_id="case-1",
-        input="hello",
-    )
-    assert case.case_id == "case-1"
+case = EvaluationCase(
+case_id="case-1",
+input="hello",
+)
+
+assert case.case_id == "case-1"
+
+
 """.lstrip(),
 
-    ".github/workflows/ci.yml": r"""
+".github/workflows/ci.yml": r"""
+
+
 name: CI
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
-  workflow_dispatch:
+push:
+branches:
+- main
+pull_request:
+workflow_dispatch:
 
 permissions:
-  contents: read
+contents: read
 
 jobs:
-  ci:
-    runs-on: ubuntu-latest
+ci:
+runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+steps:
+  - name: Checkout
+    uses: actions/checkout@v6
 
-      - name: Setup Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.13"
+  - name: Setup Python
+    uses: actions/setup-python@v6
+    with:
+      python-version: "3.13"
 
-      - name: Setup uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
+  - name: Setup uv
+    uses: astral-sh/setup-uv@v7
+    with:
+      enable-cache: true
 
-      - name: Run platform bootstrap
-        run: python scripts/bootstrap.py
+  - name: Run bootstrap
+    run: python scripts/bootstrap.py
+
+
 """.lstrip(),
 }
 
-
 DIRECTORIES = [
-    ".github/workflows",
-    "docs",
-    "evals/datasets",
-    "evals/evaluators",
-    "evals/baselines",
-    "migrations/versions",
-    "apps/dashboard",
-    "src/agent_platform/api",
-    "src/agent_platform/agents",
-    "src/agent_platform/auth",
-    "src/agent_platform/config",
-    "src/agent_platform/db/models",
-    "src/agent_platform/evaluations",
-    "src/agent_platform/llm",
-    "src/agent_platform/pricing",
-    "src/agent_platform/telemetry",
-    "src/agent_platform/tools",
-    "tests/unit",
-    "tests/integration",
-    "tests/fixtures",
+".github/workflows",
+"docs",
+"evals/datasets",
+"evals/evaluators",
+"evals/baselines",
+"migrations/versions",
+"apps/dashboard",
+"src/agent_platform/api",
+"src/agent_platform/agents",
+"src/agent_platform/auth",
+"src/agent_platform/config",
+"src/agent_platform/db/models",
+"src/agent_platform/evaluations",
+"src/agent_platform/llm",
+"src/agent_platform/pricing",
+"src/agent_platform/telemetry",
+"src/agent_platform/tools",
+"tests/unit",
+"tests/integration",
+"tests/fixtures",
 ]
 
-
 def create_repository() -> None:
-    print("\nCreating repository...\n")
+print("\nCreating repository...\n")
 
-    for directory in DIRECTORIES:
-        (ROOT / directory).mkdir(parents=True, exist_ok=True)
+for directory in DIRECTORIES:
+    (ROOT / directory).mkdir(
+        parents=True,
+        exist_ok=True,
+    )
 
-    for filename, content in FILES.items():
-        path = ROOT / filename
-        path.parent.mkdir(parents=True, exist_ok=True)
+for filename, content in FILES.items():
+    path = ROOT / filename
 
-        if not path.exists():
-            path.write_text(content, encoding="utf-8")
-            print(f"[created] {filename}")
+    path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
 
-    print("\nRepository created.\n")
+    if not path.exists():
+        path.write_text(
+            content,
+            encoding="utf-8",
+        )
+        print(f"[created] {filename}")
+
+print("\nRepository created.")
 
 
 def require(command: str) -> None:
-    if shutil.which(command) is None:
-        print(f"[error] Missing required command: {command}")
-        raise SystemExit(1)
+if shutil.which(command) is None:
+print(f"[error] Missing required command: {command}")
+raise SystemExit(1)
 
+def run(command: list[str]) -> None:
+print("\n$", " ".join(command), "\n")
 
-def command(command: list[str]) -> None:
-    print("$", " ".join(command))
-    result = subprocess.run(command, cwd=ROOT)
+result = subprocess.run(
+    command,
+    cwd=ROOT,
+    check=False,
+)
 
-    if result.returncode != 0:
-        raise SystemExit(result.returncode)
+if result.returncode != 0:
+    raise SystemExit(result.returncode)
 
 
 def check() -> None:
-    if sys.version_info < (3, 13) or sys.version_info >= (3, 14):
-        print("[error] Python 3.13 is required.")
+if sys.version_info < (3, 13) or sys.version_info >= (3, 14):
+print("[error] Python 3.13 is required.")
+raise SystemExit(1)
+
+require("git")
+require("uv")
+
+required = [
+    "pyproject.toml",
+    "README.md",
+    ".env.example",
+    ".github/workflows/ci.yml",
+]
+
+for filename in required:
+    if not (ROOT / filename).exists():
+        print(f"[error] Missing: {filename}")
         raise SystemExit(1)
 
-    require("git")
-    require("uv")
-
-    required = [
-        "pyproject.toml",
-        "README.md",
-        ".env.example",
-        ".github/workflows/ci.yml",
-    ]
-
-    for filename in required:
-        if not (ROOT / filename).exists():
-            print(f"[error] Missing {filename}")
-            raise SystemExit(1)
-
-    print("[ok] Environment ready.")
+print("[ok] Environment ready.")
 
 
 def install() -> None:
-    require("uv")
-    command(["uv", "sync"])
-
-
-def test() -> None:
-    command([
-        "uv",
-        "run",
-        "pytest",
-        "-v",
-        "--cov=src",
-    ])
-
-
-def lint() -> None:
-    command([
-        "uv",
-        "run",
-        "ruff",
-        "check",
-        ".",
-    ])
-
+require("uv")
+run(["uv", "sync"])
 
 def format_check() -> None:
-    command([
-        "uv",
-        "run",
-        "ruff",
-        "format",
-        "--check",
-        ".",
-    ])
+run([
+"uv",
+"run",
+"ruff",
+"format",
+"--check",
+".",
+])
 
+def lint() -> None:
+run([
+"uv",
+"run",
+"ruff",
+"check",
+".",
+])
 
 def typecheck() -> None:
-    command([
-        "uv",
-        "run",
-        "mypy",
-        "src",
-    ])
-
+run([
+"uv",
+"run",
+"mypy",
+"src",
+])
 
 def security() -> None:
-    command([
-        "uv",
-        "run",
-        "pip-audit",
-    ])
+run([
+"uv",
+"run",
+"pip-audit",
+])
 
+def test() -> None:
+run([
+"uv",
+"run",
+"pytest",
+"-v",
+"--cov=src",
+])
 
 def evaluate() -> None:
-    command([
-        "uv",
-        "run",
-        "python",
-        "-m",
-        "agent_platform.evaluations.runner",
-    ])
-
+run([
+"uv",
+"run",
+"python",
+"-m",
+"agent_platform.evaluations.runner",
+])
 
 def migrate() -> None:
-    if not os.getenv("DATABASE_URL"):
-        print("[skip] DATABASE_URL not configured.")
-        return
+database_url = os.getenv("DATABASE_URL")
 
-    if not (ROOT / "alembic.ini").exists():
-        print("[skip] Alembic not configured.")
-        return
+if not database_url:
+    print("[skip] DATABASE_URL not configured.")
+    return
 
-    command([
-        "uv",
-        "run",
-        "alembic",
-        "upgrade",
-        "head",
-    ])
+if not (ROOT / "alembic.ini").exists():
+    print("[skip] Alembic not configured.")
+    return
+
+run([
+    "uv",
+    "run",
+    "alembic",
+    "upgrade",
+    "head",
+])
 
 
 def all_checks() -> None:
-    create_repository()
-    check()
-    install()
-    format_check()
-    lint()
-    typecheck()
-    security()
-    test()
-    evaluate()
-    migrate()
+create_repository()
+check()
+install()
 
-    print("\n========================================")
-    print(" AI AGENT PLATFORM BOOTSTRAP COMPLETE")
-    print("========================================\n")
+format_check()
+lint()
+typecheck()
+security()
+test()
+evaluate()
+migrate()
+
+print("\n========================================")
+print(" AI AGENT PLATFORM BOOTSTRAP COMPLETE")
+print("========================================\n")
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
+parser = argparse.ArgumentParser(
+description="AI Agent Platform bootstrap script",
+)
 
-    parser.add_argument(
-        "command",
-        nargs="?",
-        default="all",
-        choices=[
-            "all",
-            "init",
-            "check",
-            "install",
-            "test",
-            "lint",
-            "format",
-            "typecheck",
-            "security",
-            "eval",
-            "migrate",
-        ],
-    )
+parser.add_argument(
+    "command",
+    nargs="?",
+    default="all",
+    choices=[
+        "all",
+        "init",
+        "check",
+        "install",
+        "test",
+        "lint",
+        "format",
+        "typecheck",
+        "security",
+        "eval",
+        "migrate",
+    ],
+)
 
-    args = parser.parse_args()
+args = parser.parse_args()
 
-    if args.command == "init":
-        create_repository()
-    elif args.command == "check":
-        check()
-    elif args.command == "install":
-        install()
-    elif args.command == "test":
-        test()
-    elif args.command == "lint":
-        lint()
-    elif args.command == "format":
-        format_check()
-    elif args.command == "typecheck":
-        typecheck()
-    elif args.command == "security":
-        security()
-    elif args.command == "eval":
-        evaluate()
-    elif args.command == "migrate":
-        migrate()
-    else:
-        all_checks()
+if args.command == "init":
+    create_repository()
 
-    return 0
+elif args.command == "check":
+    check()
+
+elif args.command == "install":
+    install()
+
+elif args.command == "test":
+    test()
+
+elif args.command == "lint":
+    lint()
+
+elif args.command == "format":
+    format_check()
+
+elif args.command == "typecheck":
+    typecheck()
+
+elif args.command == "security":
+    security()
+
+elif args.command == "eval":
+    evaluate()
+
+elif args.command == "migrate":
+    migrate()
+
+else:
+    all_checks()
+
+return 0
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
+if name == "main":
+raise SystemExit(main())
+
+:::
+
+The specific failure you posted is fixed by:
+
+```python
+import shutil
+
+
+near the top.
+
+After replacing the file, your existing GitHub Action can simply run:
+
+python scripts/bootstrap.py
+
+
+and the script itself handles the rest.
