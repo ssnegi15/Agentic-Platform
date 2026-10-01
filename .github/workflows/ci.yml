@@ -26,7 +26,7 @@ jobs:
           python-version: "3.13"
 
       - name: Run project generator
-        run: python bootstrap.py
+        run: python scripts/bootstrap.py
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v7
