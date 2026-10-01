@@ -28,6 +28,7 @@ dev = [
   "pytest>=8,<10",
   "pytest-asyncio>=1,<2",
   "ruff>=0.14,<1",
+  "types-jsonschema>=4.24,<5",
 ]
 
 [tool.hatch.build.targets.wheel]
