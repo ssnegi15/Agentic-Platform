@@ -185,9 +185,7 @@ async def agent_metrics(
     )
     agents = [dict(row) for row in result.mappings()]
     for agent in agents:
-        agent["success_rate"] = (
-            agent["successful_runs"] / agent["runs"] if agent["runs"] else 0
-        )
+        agent["success_rate"] = agent["successful_runs"] / agent["runs"] if agent["runs"] else 0
     return agents
 
 
@@ -306,9 +304,7 @@ async def trace_detail(
         {"platform-admin", "platform-observer"} & principal.roles
     ):
         raise HTTPException(status_code=404, detail="Trace not found.")
-    spans = (
-        await session.scalars(select(SpanRecord).where(SpanRecord.trace_id == trace_id))
-    ).all()
+    spans = (await session.scalars(select(SpanRecord).where(SpanRecord.trace_id == trace_id))).all()
     llm_calls = (
         await session.scalars(select(LLMCallRecord).where(LLMCallRecord.trace_id == trace_id))
     ).all()

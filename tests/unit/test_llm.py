@@ -29,9 +29,7 @@ async def test_openai_compatible_provider_parses_usage_and_response() -> None:
             provider="test",
             client=client,
         )
-        result = await provider.complete(
-            LLMRequest("test-model", [LLMMessage("user", "hello")])
-        )
+        result = await provider.complete(LLMRequest("test-model", [LLMMessage("user", "hello")]))
 
     assert result.content == "hello"
     assert result.provider == "test"

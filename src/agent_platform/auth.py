@@ -59,17 +59,21 @@ async def current_principal(
     realm_access = claims.get("realm_access", {})
     realm_roles = realm_access.get("roles", []) if isinstance(realm_access, dict) else []
     client_roles = claims.get("resource_access", {})
-    roles = {role for role in realm_roles if isinstance(role, str)} if isinstance(
-        realm_roles, list
-    ) else set()
+    roles = (
+        {role for role in realm_roles if isinstance(role, str)}
+        if isinstance(realm_roles, list)
+        else set()
+    )
     if isinstance(client_roles, dict):
         for client in client_roles.values():
             if isinstance(client, dict) and isinstance(client.get("roles"), list):
                 roles.update(client["roles"])
     groups_value = claims.get(settings.oidc_groups_claim, [])
-    groups = tuple(group for group in groups_value if isinstance(group, str)) if isinstance(
-        groups_value, list
-    ) else ()
+    groups = (
+        tuple(group for group in groups_value if isinstance(group, str))
+        if isinstance(groups_value, list)
+        else ()
+    )
     subject = claims.get("sub")
     if not isinstance(subject, str) or not subject:
         raise _unauthorized()
