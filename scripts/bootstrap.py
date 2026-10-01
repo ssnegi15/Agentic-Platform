@@ -2,62 +2,47 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 
-
 FILES = {
-    "README.md": """
+    "README.md": """\
 # Agentic Platform
 
-Open-source, GitHub-first AI agent platform.
+Open-source GitHub-first AI agent platform.
 
-## Architecture
+## Stack
 
+- Python 3.13
 - FastAPI
-- Plain Python agents
 - PostgreSQL
 - pgvector
-- Keycloak / OIDC
+- Keycloak/OIDC
 - Vendor-neutral LLM providers
 - PostgreSQL telemetry
 - Evaluation framework
 - Dashboard
-- GitHub Actions
 
-The platform intentionally does not require:
-
-- Azure AI Foundry
-- Firebase Auth
-- Ollama
-- Jaeger
-- Langfuse
-- LangSmith
-- Redis
-- Kafka
-- Kubernetes
-- Docker Compose
+No Azure AI Foundry, Firebase Auth, Ollama, Jaeger, Langfuse,
+LangSmith, Redis, Kafka, Kubernetes, or Docker Compose is required.
 """,
 
-    ".gitignore": """
+    ".gitignore": """\
 .env
 .env.*
 !.env.example
-
 .venv/
 __pycache__/
 *.py[cod]
 *.egg-info/
-
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 .coverage
-
 node_modules/
 .next/
 dist/
 build/
 """,
 
-    ".env.example": """
+    ".env.example": """\
 APP_NAME=agent-platform
 ENVIRONMENT=development
 APPLICATION_VERSION=0.1.0
@@ -80,7 +65,7 @@ TELEMETRY_CAPTURE_OUTPUTS=false
 
     ".python-version": "3.13\n",
 
-    "pyproject.toml": """
+    "pyproject.toml": """\
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -104,7 +89,6 @@ dependencies = [
     "httpx>=0.28,<1",
     "PyJWT[crypto]>=2.10,<3",
     "openai>=2,<3",
-    "structlog>=25,<26",
 ]
 
 [dependency-groups]
@@ -135,13 +119,13 @@ python_version = "3.13"
 strict = true
 """,
 
-    "src/agent_platform/__init__.py": """
+    "src/agent_platform/__init__.py": """\
 __version__ = "0.1.0"
 """,
 
     "src/agent_platform/api/__init__.py": "",
 
-    "src/agent_platform/api/main.py": """
+    "src/agent_platform/api/main.py": """\
 from fastapi import FastAPI
 
 from agent_platform import __version__
@@ -175,7 +159,7 @@ async def api_info() -> dict[str, str]:
 
     "src/agent_platform/config/__init__.py": "",
 
-    "src/agent_platform/config/settings.py": """
+    "src/agent_platform/config/settings.py": """\
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -187,8 +171,7 @@ class Settings(BaseSettings):
     application_version: str = "0.1.0"
 
     database_url: str = (
-        "postgresql+psycopg://postgres:postgres"
-        "@localhost:5432/agent_platform"
+        "postgresql+psycopg://postgres:postgres@localhost:5432/agent_platform"
     )
 
     oidc_issuer_url: str | None = None
@@ -217,7 +200,7 @@ def get_settings() -> Settings:
 
     "src/agent_platform/agents/__init__.py": "",
 
-    "src/agent_platform/agents/runtime.py": """
+    "src/agent_platform/agents/runtime.py": """\
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -252,7 +235,7 @@ class Agent:
         )
 """,
 
-    "src/agent_platform/llm/__init__.py": """
+    "src/agent_platform/llm/__init__.py": """\
 from .base import (
     LLMMessage,
     LLMProvider,
@@ -270,7 +253,7 @@ __all__ = [
 ]
 """,
 
-    "src/agent_platform/llm/base.py": """
+    "src/agent_platform/llm/base.py": """\
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -316,13 +299,13 @@ class LLMProvider(Protocol):
         ...
 """,
 
-    "src/agent_platform/telemetry/__init__.py": """
+    "src/agent_platform/telemetry/__init__.py": """\
 from .base import Span, Telemetry, Trace
 
 __all__ = ["Span", "Telemetry", "Trace"]
 """,
 
-    "src/agent_platform/telemetry/base.py": """
+    "src/agent_platform/telemetry/base.py": """\
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Protocol
@@ -372,7 +355,7 @@ class Telemetry(Protocol):
         ...
 """,
 
-    "src/agent_platform/telemetry/memory.py": """
+    "src/agent_platform/telemetry/memory.py": """\
 from agent_platform.telemetry.base import Span, Trace
 
 
@@ -400,7 +383,7 @@ class InMemoryTelemetry:
 
     "src/agent_platform/pricing/__init__.py": "",
 
-    "src/agent_platform/pricing/models.py": """
+    "src/agent_platform/pricing/models.py": """\
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -429,7 +412,7 @@ def estimate_cost(
 
     "src/agent_platform/evaluations/__init__.py": "",
 
-    "src/agent_platform/evaluations/base.py": """
+    "src/agent_platform/evaluations/base.py": """\
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -461,7 +444,7 @@ class Evaluator(Protocol):
         ...
 """,
 
-    "src/agent_platform/evaluations/deterministic.py": """
+    "src/agent_platform/evaluations/deterministic.py": """\
 from agent_platform.evaluations.base import (
     EvaluationCase,
     EvaluationResult,
@@ -486,7 +469,7 @@ class ExactMatchEvaluator:
         )
 """,
 
-    "src/agent_platform/evaluations/runner.py": """
+    "src/agent_platform/evaluations/runner.py": """\
 import asyncio
 
 from agent_platform.evaluations.base import EvaluationCase
@@ -516,7 +499,7 @@ if __name__ == "__main__":
 
     "src/agent_platform/auth/__init__.py": "",
 
-    "src/agent_platform/auth/oidc.py": """
+    "src/agent_platform/auth/oidc.py": """\
 from dataclasses import dataclass
 
 
@@ -535,13 +518,13 @@ class OIDCAuthenticator:
         token: str,
     ) -> AuthenticatedUser:
         raise NotImplementedError(
-            "Configure Keycloak/OIDC before enabling authentication."
+            "Configure Keycloak/OIDC before authentication."
         )
 """,
 
     "src/agent_platform/tools/__init__.py": "",
 
-    "src/agent_platform/tools/base.py": """
+    "src/agent_platform/tools/base.py": """\
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -567,7 +550,7 @@ class Tool(Protocol):
 
     "src/agent_platform/db/models/__init__.py": "",
 
-    "src/agent_platform/db/session.py": """
+    "src/agent_platform/db/session.py": """\
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -589,115 +572,9 @@ SessionLocal = async_sessionmaker(
 )
 """,
 
-    "migrations/README.md": """
-# Migrations
-
-PostgreSQL migrations will live in `migrations/versions`.
-""",
-
-    "migrations/versions/.gitkeep": "",
-
-    "evals/datasets/smoke.json": """
-{
-  "name": "smoke",
-  "version": "1",
-  "cases": [
-    {
-      "id": "smoke-001",
-      "input": "hello",
-      "expected_output": "hello"
-    }
-  ]
-}
-""",
-
-    "evals/evaluators/README.md": "# Evaluators\n",
-
-    "evals/baselines/README.md": "# Evaluation baselines\n",
-
-    "apps/dashboard/README.md": """
-# Dashboard
-
-Planned dashboard:
-
-- system overview
-- traces
-- agents
-- LLM usage
-- tokens
-- costs
-- tools
-- evaluations
-- regression trends
-""",
-
-    "apps/dashboard/package.json": """
-{
-  "name": "agent-platform-dashboard",
-  "private": true,
-  "version": "0.1.0",
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start"
-  }
-}
-""",
-
-    "docs/architecture.md": """
-# Architecture
-
-GitHub
-  |
-GitHub Actions
-  |
-FastAPI
-  |
-Agent Runtime
-  |
-  +-- LLM Provider
-  +-- Tools
-  +-- Telemetry
-  +-- Evaluations
-  |
-PostgreSQL + pgvector
-  |
-Dashboard
-""",
-
-    "docs/telemetry.md": """
-# Telemetry
-
-The telemetry abstraction records:
-
-- traces
-- spans
-- agent steps
-- LLM calls
-- tokens
-- latency
-- estimated cost
-- tool calls
-- errors
-
-The first storage backend is PostgreSQL.
-""",
-
-    "docs/evaluations.md": """
-# Evaluations
-
-Supported evaluator categories:
-
-1. deterministic
-2. reference-based
-3. LLM-as-judge
-
-Evaluation data will be persisted in PostgreSQL.
-""",
-
     "tests/__init__.py": "",
 
-    "tests/unit/test_health.py": """
+    "tests/unit/test_health.py": """\
 from fastapi.testclient import TestClient
 
 from agent_platform.api.main import app
@@ -716,7 +593,7 @@ def test_ready() -> None:
     assert response.status_code == 200
 """,
 
-    "tests/unit/test_llm.py": """
+    "tests/unit/test_llm.py": """\
 from agent_platform.llm.base import TokenUsage
 
 
@@ -729,7 +606,7 @@ def test_tokens() -> None:
     assert usage.total_tokens == 30
 """,
 
-    "tests/unit/test_pricing.py": """
+    "tests/unit/test_pricing.py": """\
 from datetime import datetime, timezone
 
 from agent_platform.pricing.models import (
@@ -754,7 +631,7 @@ def test_cost() -> None:
     ) == 3.0
 """,
 
-    "tests/unit/test_evaluation.py": """
+    "tests/unit/test_evaluation.py": """\
 import asyncio
 
 from agent_platform.evaluations.base import EvaluationCase
@@ -777,47 +654,99 @@ def test_evaluation() -> None:
 
     assert result.passed
 """,
+
+    "evals/datasets/smoke.json": """\
+{
+  "name": "smoke",
+  "version": "1",
+  "cases": [
+    {
+      "id": "smoke-001",
+      "input": "hello",
+      "expected_output": "hello"
+    }
+  ]
+}
+""",
+
+    "migrations/README.md": "# PostgreSQL migrations.\n",
+
+    "migrations/versions/.gitkeep": "",
+
+    "docs/architecture.md": """\
+# Architecture
+
+GitHub
+-> GitHub Actions
+-> FastAPI
+-> Agent Runtime
+-> LLM Provider / Tools
+-> PostgreSQL + pgvector
+-> Telemetry
+-> Evaluations
+-> Dashboard
+
+Keycloak provides OIDC authentication.
+
+All LLM, telemetry and evaluation functionality uses replaceable
+application interfaces.
+""",
+
+    "docs/telemetry.md": """\
+# Telemetry
+
+Tracks traces, spans, agent steps, LLM calls, tool calls,
+tokens, latency, estimated costs and errors.
+
+Initial storage backend: PostgreSQL.
+""",
+
+    "docs/evaluations.md": """\
+# Evaluations
+
+Evaluator types:
+
+- deterministic
+- reference-based
+- LLM-as-judge
+
+Results are designed for PostgreSQL persistence and CI quality gates.
+""",
+
+    "apps/dashboard/README.md": """\
+# Dashboard
+
+Dashboard for system metrics, traces, agents, models,
+tokens, estimated costs, tools and evaluations.
+""",
 }
 
 
 def write_file(relative_path: str, content: str) -> None:
     path = ROOT / relative_path
-
-    path.parent.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
-    path.write_text(
-        content.lstrip(),
-        encoding="utf-8",
-    )
-
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content.lstrip(), encoding="utf-8")
     print(f"[created] {relative_path}")
 
 
 def main() -> None:
     print("=== Agentic Platform Bootstrap ===")
+    print(f"Repository: {ROOT}")
 
     for relative_path, content in FILES.items():
         write_file(relative_path, content)
 
-    directories = [
+    for directory in (
         "tests/integration",
         "tests/fixtures",
         "migrations/versions",
         "apps/dashboard",
-    ]
-
-    for directory in directories:
-        (ROOT / directory).mkdir(
-            parents=True,
-            exist_ok=True,
-        )
+    ):
+        (ROOT / directory).mkdir(parents=True, exist_ok=True)
 
     print()
-    print("Project generation complete.")
-    print(f"Generated project: {ROOT}")
+    print("=== COMPLETE ===")
+    print(f"Generated project in: {ROOT}")
 
 
 if __name__ == "__main__":
