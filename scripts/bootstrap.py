@@ -1,39 +1,61 @@
-#!/usr/bin/env python3
-
-from __future__ import annotations
-
-import argparse
-import os
-import shutil
-import subprocess
-import sys
 from pathlib import Path
 
-
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parent
 
 
 FILES = {
+    "README.md": """
+# Agentic Platform
+
+Open-source, GitHub-first AI agent platform.
+
+## Architecture
+
+- FastAPI
+- Plain Python agents
+- PostgreSQL
+- pgvector
+- Keycloak / OIDC
+- Vendor-neutral LLM providers
+- PostgreSQL telemetry
+- Evaluation framework
+- Dashboard
+- GitHub Actions
+
+The platform intentionally does not require:
+
+- Azure AI Foundry
+- Firebase Auth
+- Ollama
+- Jaeger
+- Langfuse
+- LangSmith
+- Redis
+- Kafka
+- Kubernetes
+- Docker Compose
+""",
+
     ".gitignore": """
 .env
 .env.*
 !.env.example
+
 .venv/
 __pycache__/
 *.py[cod]
 *.egg-info/
+
 .pytest_cache/
-.coverage
 .mypy_cache/
 .ruff_cache/
-build/
-dist/
+.coverage
+
 node_modules/
 .next/
-.DS_Store
+dist/
+build/
 """,
-
-    ".python-version": "3.13\n",
 
     ".env.example": """
 APP_NAME=agent-platform
@@ -56,6 +78,8 @@ TELEMETRY_CAPTURE_INPUTS=false
 TELEMETRY_CAPTURE_OUTPUTS=false
 """,
 
+    ".python-version": "3.13\n",
+
     "pyproject.toml": """
 [build-system]
 requires = ["hatchling"]
@@ -67,6 +91,7 @@ version = "0.1.0"
 description = "Open-source GitHub-first AI agent platform"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
+
 dependencies = [
     "fastapi>=0.141,<1",
     "uvicorn[standard]>=0.35,<1",
@@ -89,7 +114,6 @@ dev = [
     "pytest-cov>=6,<8",
     "ruff>=0.14,<1",
     "mypy>=1.18,<2",
-    "pip-audit>=2.9,<3",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -111,47 +135,42 @@ python_version = "3.13"
 strict = true
 """,
 
-    "README.md": """
-# AI Agent Platform
-
-GitHub-first, open-source AI agent platform.
-
-## Architecture
-
-- FastAPI
-- Plain Python agents
-- PostgreSQL
-- pgvector
-- Keycloak / OIDC
-- Vendor-neutral LLM abstraction
-- PostgreSQL telemetry
-- Evaluation framework
-- GitHub Actions
-
-The platform does not require:
-
-- Azure AI Foundry
-- Firebase Auth
-- Ollama
-- Jaeger
-- Langfuse
-- LangSmith
-- Redis
-- Kafka
-- Kubernetes
-- Docker Compose
-
-## Bootstrap
-
-Run:
-
-    python scripts/bootstrap.py
-
-The bootstrap process does not require application secrets.
-""",
-
     "src/agent_platform/__init__.py": """
 __version__ = "0.1.0"
+""",
+
+    "src/agent_platform/api/__init__.py": "",
+
+    "src/agent_platform/api/main.py": """
+from fastapi import FastAPI
+
+from agent_platform import __version__
+
+app = FastAPI(
+    title="Agentic Platform",
+    version=__version__,
+)
+
+
+@app.get("/health")
+async def health() -> dict[str, str]:
+    return {
+        "status": "ok",
+        "version": __version__,
+    }
+
+
+@app.get("/ready")
+async def ready() -> dict[str, str]:
+    return {"status": "ready"}
+
+
+@app.get("/api/v1")
+async def api_info() -> dict[str, str]:
+    return {
+        "name": "agent-platform",
+        "version": __version__,
+    }
 """,
 
     "src/agent_platform/config/__init__.py": "",
@@ -187,7 +206,6 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_file=".env",
-        env_file_encoding="utf-8",
         extra="ignore",
     )
 
@@ -195,38 +213,6 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-""",
-
-    "src/agent_platform/api/__init__.py": "",
-
-    "src/agent_platform/api/main.py": """
-from fastapi import FastAPI
-
-from agent_platform import __version__
-from agent_platform.config.settings import get_settings
-
-
-settings = get_settings()
-
-app = FastAPI(
-    title=settings.app_name,
-    version=__version__,
-)
-
-
-@app.get("/health")
-async def health() -> dict[str, str]:
-    return {
-        "status": "ok",
-        "version": __version__,
-    }
-
-
-@app.get("/ready")
-async def ready() -> dict[str, str]:
-    return {
-        "status": "ready",
-    }
 """,
 
     "src/agent_platform/agents/__init__.py": "",
@@ -259,11 +245,30 @@ class Agent:
     ) -> AgentResponse:
         return AgentResponse(
             message="Agent runtime ready.",
-            metadata={"agent": self.name},
+            metadata={
+                "agent": self.name,
+                "session_id": request.session_id,
+            },
         )
 """,
 
-    "src/agent_platform/llm/__init__.py": "",
+    "src/agent_platform/llm/__init__.py": """
+from .base import (
+    LLMMessage,
+    LLMProvider,
+    LLMRequest,
+    LLMResponse,
+    TokenUsage,
+)
+
+__all__ = [
+    "LLMMessage",
+    "LLMProvider",
+    "LLMRequest",
+    "LLMResponse",
+    "TokenUsage",
+]
+""",
 
     "src/agent_platform/llm/base.py": """
 from dataclasses import dataclass, field
@@ -301,7 +306,6 @@ class LLMResponse:
     usage: TokenUsage
     latency_ms: float
     estimated_cost: float | None = None
-    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class LLMProvider(Protocol):
@@ -313,7 +317,7 @@ class LLMProvider(Protocol):
 """,
 
     "src/agent_platform/telemetry/__init__.py": """
-from agent_platform.telemetry.base import Span, Telemetry, Trace
+from .base import Span, Telemetry, Trace
 
 __all__ = ["Span", "Telemetry", "Trace"]
 """,
@@ -368,6 +372,61 @@ class Telemetry(Protocol):
         ...
 """,
 
+    "src/agent_platform/telemetry/memory.py": """
+from agent_platform.telemetry.base import Span, Trace
+
+
+class InMemoryTelemetry:
+    def __init__(self) -> None:
+        self.traces: dict[str, Trace] = {}
+        self.spans: list[Span] = []
+
+    async def start_trace(self, trace: Trace) -> None:
+        self.traces[trace.trace_id] = trace
+
+    async def finish_trace(
+        self,
+        trace_id: str,
+        status: str,
+        error: str | None = None,
+    ) -> None:
+        trace = self.traces[trace_id]
+        trace.status = status
+        trace.error = error
+
+    async def record_span(self, span: Span) -> None:
+        self.spans.append(span)
+""",
+
+    "src/agent_platform/pricing/__init__.py": "",
+
+    "src/agent_platform/pricing/models.py": """
+from dataclasses import dataclass
+from datetime import datetime
+
+
+@dataclass(frozen=True)
+class ModelPricing:
+    provider: str
+    model: str
+    input_cost_per_1m_tokens: float
+    output_cost_per_1m_tokens: float
+    effective_from: datetime
+    effective_until: datetime | None = None
+
+
+def estimate_cost(
+    pricing: ModelPricing,
+    input_tokens: int,
+    output_tokens: int,
+) -> float:
+    return (
+        input_tokens / 1_000_000
+    ) * pricing.input_cost_per_1m_tokens + (
+        output_tokens / 1_000_000
+    ) * pricing.output_cost_per_1m_tokens
+""",
+
     "src/agent_platform/evaluations/__init__.py": "",
 
     "src/agent_platform/evaluations/base.py": """
@@ -402,51 +461,241 @@ class Evaluator(Protocol):
         ...
 """,
 
+    "src/agent_platform/evaluations/deterministic.py": """
+from agent_platform.evaluations.base import (
+    EvaluationCase,
+    EvaluationResult,
+)
+
+
+class ExactMatchEvaluator:
+    name = "exact_match"
+
+    async def evaluate(
+        self,
+        case: EvaluationCase,
+        actual_output: object,
+    ) -> EvaluationResult:
+        passed = actual_output == case.expected_output
+
+        return EvaluationResult(
+            evaluator=self.name,
+            score=1.0 if passed else 0.0,
+            passed=passed,
+            reason=None if passed else "Output mismatch.",
+        )
+""",
+
     "src/agent_platform/evaluations/runner.py": """
-def main() -> int:
-    print("Evaluation framework ready; no datasets configured.")
-    return 0
+import asyncio
+
+from agent_platform.evaluations.base import EvaluationCase
+from agent_platform.evaluations.deterministic import ExactMatchEvaluator
+
+
+async def run() -> bool:
+    case = EvaluationCase(
+        case_id="smoke-001",
+        input="hello",
+        expected_output="hello",
+    )
+
+    result = await ExactMatchEvaluator().evaluate(
+        case,
+        "hello",
+    )
+
+    return result.passed
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    passed = asyncio.run(run())
+    print("[eval] PASSED" if passed else "[eval] FAILED")
+    raise SystemExit(0 if passed else 1)
 """,
 
-    "src/agent_platform/pricing/__init__.py": "",
+    "src/agent_platform/auth/__init__.py": "",
 
-    "src/agent_platform/pricing/models.py": """
+    "src/agent_platform/auth/oidc.py": """
 from dataclasses import dataclass
-from datetime import datetime
 
 
 @dataclass(frozen=True)
-class ModelPricing:
-    provider: str
-    model: str
-    input_cost_per_1m_tokens: float
-    output_cost_per_1m_tokens: float
-    effective_from: datetime
-    effective_until: datetime | None = None
+class AuthenticatedUser:
+    subject: str
+    email: str | None = None
+    name: str | None = None
+    roles: tuple[str, ...] = ()
+    groups: tuple[str, ...] = ()
 
 
-def estimate_cost(
-    pricing: ModelPricing,
-    input_tokens: int,
-    output_tokens: int,
-) -> float:
-    input_cost = (
-        input_tokens / 1_000_000
-    ) * pricing.input_cost_per_1m_tokens
+class OIDCAuthenticator:
+    async def authenticate(
+        self,
+        token: str,
+    ) -> AuthenticatedUser:
+        raise NotImplementedError(
+            "Configure Keycloak/OIDC before enabling authentication."
+        )
+""",
 
-    output_cost = (
-        output_tokens / 1_000_000
-    ) * pricing.output_cost_per_1m_tokens
+    "src/agent_platform/tools/__init__.py": "",
 
-    return input_cost + output_cost
+    "src/agent_platform/tools/base.py": """
+from dataclasses import dataclass
+from typing import Any, Protocol
+
+
+@dataclass
+class ToolResult:
+    output: Any
+    success: bool
+    error: str | None = None
+
+
+class Tool(Protocol):
+    name: str
+
+    async def execute(
+        self,
+        arguments: dict[str, Any],
+    ) -> ToolResult:
+        ...
 """,
 
     "src/agent_platform/db/__init__.py": "",
+
     "src/agent_platform/db/models/__init__.py": "",
+
+    "src/agent_platform/db/session.py": """
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+
+from agent_platform.config.settings import get_settings
+
+
+engine = create_async_engine(
+    get_settings().database_url,
+    pool_pre_ping=True,
+)
+
+SessionLocal = async_sessionmaker(
+    engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+)
+""",
+
+    "migrations/README.md": """
+# Migrations
+
+PostgreSQL migrations will live in `migrations/versions`.
+""",
+
+    "migrations/versions/.gitkeep": "",
+
+    "evals/datasets/smoke.json": """
+{
+  "name": "smoke",
+  "version": "1",
+  "cases": [
+    {
+      "id": "smoke-001",
+      "input": "hello",
+      "expected_output": "hello"
+    }
+  ]
+}
+""",
+
+    "evals/evaluators/README.md": "# Evaluators\n",
+
+    "evals/baselines/README.md": "# Evaluation baselines\n",
+
+    "apps/dashboard/README.md": """
+# Dashboard
+
+Planned dashboard:
+
+- system overview
+- traces
+- agents
+- LLM usage
+- tokens
+- costs
+- tools
+- evaluations
+- regression trends
+""",
+
+    "apps/dashboard/package.json": """
+{
+  "name": "agent-platform-dashboard",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  }
+}
+""",
+
+    "docs/architecture.md": """
+# Architecture
+
+GitHub
+  |
+GitHub Actions
+  |
+FastAPI
+  |
+Agent Runtime
+  |
+  +-- LLM Provider
+  +-- Tools
+  +-- Telemetry
+  +-- Evaluations
+  |
+PostgreSQL + pgvector
+  |
+Dashboard
+""",
+
+    "docs/telemetry.md": """
+# Telemetry
+
+The telemetry abstraction records:
+
+- traces
+- spans
+- agent steps
+- LLM calls
+- tokens
+- latency
+- estimated cost
+- tool calls
+- errors
+
+The first storage backend is PostgreSQL.
+""",
+
+    "docs/evaluations.md": """
+# Evaluations
+
+Supported evaluator categories:
+
+1. deterministic
+2. reference-based
+3. LLM-as-judge
+
+Evaluation data will be persisted in PostgreSQL.
+""",
+
+    "tests/__init__.py": "",
 
     "tests/unit/test_health.py": """
 from fastapi.testclient import TestClient
@@ -459,13 +708,19 @@ def test_health() -> None:
 
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
+
+
+def test_ready() -> None:
+    response = TestClient(app).get("/ready")
+
+    assert response.status_code == 200
 """,
 
     "tests/unit/test_llm.py": """
 from agent_platform.llm.base import TokenUsage
 
 
-def test_token_usage() -> None:
+def test_tokens() -> None:
     usage = TokenUsage(
         input_tokens=10,
         output_tokens=20,
@@ -474,329 +729,96 @@ def test_token_usage() -> None:
     assert usage.total_tokens == 30
 """,
 
-    "tests/unit/test_evaluations.py": """
-from agent_platform.evaluations.base import EvaluationCase
+    "tests/unit/test_pricing.py": """
+from datetime import datetime, timezone
+
+from agent_platform.pricing.models import (
+    ModelPricing,
+    estimate_cost,
+)
 
 
-def test_evaluation_case() -> None:
-    case = EvaluationCase(
-        case_id="case-1",
-        input="hello",
+def test_cost() -> None:
+    pricing = ModelPricing(
+        provider="test",
+        model="test",
+        input_cost_per_1m_tokens=1.0,
+        output_cost_per_1m_tokens=2.0,
+        effective_from=datetime.now(timezone.utc),
     )
 
-    assert case.case_id == "case-1"
+    assert estimate_cost(
+        pricing,
+        1_000_000,
+        1_000_000,
+    ) == 3.0
 """,
 
-    ".github/workflows/ci.yml": """
-name: CI
+    "tests/unit/test_evaluation.py": """
+import asyncio
 
-on:
-  push:
-    branches:
-      - main
-  pull_request:
-  workflow_dispatch:
+from agent_platform.evaluations.base import EvaluationCase
+from agent_platform.evaluations.deterministic import ExactMatchEvaluator
 
-permissions:
-  contents: read
 
-jobs:
-  ci:
-    runs-on: ubuntu-latest
+def test_evaluation() -> None:
+    case = EvaluationCase(
+        case_id="1",
+        input="hello",
+        expected_output="hello",
+    )
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+    result = asyncio.run(
+        ExactMatchEvaluator().evaluate(
+            case,
+            "hello",
+        )
+    )
 
-      - name: Setup Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.13"
-
-      - name: Setup uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
-
-      - name: Run bootstrap
-        run: python scripts/bootstrap.py
+    assert result.passed
 """,
 }
 
 
-DIRECTORIES = [
-    ".github/workflows",
-    "docs",
-    "evals/datasets",
-    "evals/evaluators",
-    "evals/baselines",
-    "migrations/versions",
-    "apps/dashboard",
-    "src/agent_platform/api",
-    "src/agent_platform/agents",
-    "src/agent_platform/auth",
-    "src/agent_platform/config",
-    "src/agent_platform/db/models",
-    "src/agent_platform/evaluations",
-    "src/agent_platform/llm",
-    "src/agent_platform/pricing",
-    "src/agent_platform/telemetry",
-    "src/agent_platform/tools",
-    "tests/unit",
-    "tests/integration",
-    "tests/fixtures",
-]
+def write_file(relative_path: str, content: str) -> None:
+    path = ROOT / relative_path
+
+    path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    path.write_text(
+        content.lstrip(),
+        encoding="utf-8",
+    )
+
+    print(f"[created] {relative_path}")
 
 
-def create_repository() -> None:
-    print("\n[bootstrap] Creating repository...\n")
+def main() -> None:
+    print("=== Agentic Platform Bootstrap ===")
 
-    for directory in DIRECTORIES:
+    for relative_path, content in FILES.items():
+        write_file(relative_path, content)
+
+    directories = [
+        "tests/integration",
+        "tests/fixtures",
+        "migrations/versions",
+        "apps/dashboard",
+    ]
+
+    for directory in directories:
         (ROOT / directory).mkdir(
             parents=True,
             exist_ok=True,
         )
 
-    for filename, content in FILES.items():
-        path = ROOT / filename
-
-        path.parent.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
-
-        if not path.exists():
-            path.write_text(
-                content.lstrip(),
-                encoding="utf-8",
-            )
-            print(f"[created] {filename}")
-
-    print("\n[bootstrap] Repository created.\n")
-
-
-def require(command: str) -> None:
-    if shutil.which(command) is None:
-        print(f"[error] Missing required command: {command}")
-        raise SystemExit(1)
-
-
-def run(command: list[str]) -> None:
-    print("$ " + " ".join(command))
-
-    result = subprocess.run(
-        command,
-        cwd=ROOT,
-        check=False,
-    )
-
-    if result.returncode != 0:
-        raise SystemExit(result.returncode)
-
-
-def check() -> None:
-    if sys.version_info < (3, 13) or sys.version_info >= (3, 14):
-        print("[error] Python 3.13 is required.")
-        raise SystemExit(1)
-
-    require("git")
-    require("uv")
-
-    required = [
-        "pyproject.toml",
-        "README.md",
-        ".env.example",
-        ".github/workflows/ci.yml",
-    ]
-
-    for filename in required:
-        if not (ROOT / filename).exists():
-            print(f"[error] Missing: {filename}")
-            raise SystemExit(1)
-
-    print("[ok] Environment ready.")
-
-
-def install() -> None:
-    require("uv")
-    run(["uv", "sync"])
-
-
-def format_check() -> None:
-    run(
-        [
-            "uv",
-            "run",
-            "ruff",
-            "format",
-            ".",
-        ]
-    )
-
-
-def lint() -> None:
-    # Automatically fix safe Ruff issues first.
-    run(
-        [
-            "uv",
-            "run",
-            "ruff",
-            "check",
-            ".",
-            "--fix",
-        ]
-    )
-
-    # Then verify that nothing remains.
-    run(
-        [
-            "uv",
-            "run",
-            "ruff",
-            "check",
-            ".",
-        ]
-    )
-
-
-
-def typecheck() -> None:
-    run(
-        [
-            "uv",
-            "run",
-            "mypy",
-            "src",
-        ]
-    )
-
-
-def security() -> None:
-    run(
-        [
-            "uv",
-            "run",
-            "pip-audit",
-        ]
-    )
-
-
-def test() -> None:
-    run(
-        [
-            "uv",
-            "run",
-            "pytest",
-            "-v",
-            "--cov=src",
-        ]
-    )
-
-
-def evaluate() -> None:
-    run(
-        [
-            "uv",
-            "run",
-            "python",
-            "-m",
-            "agent_platform.evaluations.runner",
-        ]
-    )
-
-
-def migrate() -> None:
-    if not os.getenv("DATABASE_URL"):
-        print("[skip] DATABASE_URL not configured.")
-        return
-
-    print("[info] Database migration support will be enabled with "
-          "the PostgreSQL migration layer.")
-
-    return
-
-
-def all_checks() -> None:
-    create_repository()
-    check()
-    install()
-
-    format_check()
-    lint()
-    typecheck()
-    security()
-    test()
-    evaluate()
-    migrate()
-
     print()
-    print("========================================")
-    print(" AI AGENT PLATFORM BOOTSTRAP COMPLETE")
-    print("========================================")
-    print()
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="AI Agent Platform bootstrap script",
-    )
-
-    parser.add_argument(
-        "command",
-        nargs="?",
-        default="all",
-        choices=[
-            "all",
-            "init",
-            "check",
-            "install",
-            "test",
-            "lint",
-            "format",
-            "typecheck",
-            "security",
-            "eval",
-            "migrate",
-        ],
-    )
-
-    args = parser.parse_args()
-
-    if args.command == "init":
-        create_repository()
-
-    elif args.command == "check":
-        check()
-
-    elif args.command == "install":
-        install()
-
-    elif args.command == "test":
-        test()
-
-    elif args.command == "lint":
-        lint()
-
-    elif args.command == "format":
-        format_check()
-
-    elif args.command == "typecheck":
-        typecheck()
-
-    elif args.command == "security":
-        security()
-
-    elif args.command == "eval":
-        evaluate()
-
-    elif args.command == "migrate":
-        migrate()
-
-    else:
-        all_checks()
-
-    return 0
+    print("Project generation complete.")
+    print(f"Generated project: {ROOT}")
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()
