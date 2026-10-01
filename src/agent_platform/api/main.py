@@ -9,6 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from agent_platform import __version__
+from agent_platform.agents.assistant import AssistantAgent
+from agent_platform.agents.runtime import AgentRequest, AgentRuntime
 from agent_platform.api.schemas import (
     AgentRunRequest,
     AgentRunResponse,
@@ -16,8 +18,6 @@ from agent_platform.api.schemas import (
     ModelPricingResponse,
     PrincipalResponse,
 )
-from agent_platform.agents.assistant import AssistantAgent
-from agent_platform.agents.runtime import AgentRequest, AgentRuntime
 from agent_platform.auth import Principal, current_principal, require_role
 from agent_platform.config import get_settings
 from agent_platform.db import dispose_engine, get_session, session_factory
@@ -44,6 +44,7 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="Agent Platform", version=__version__, lifespan=lifespan)
+platform_admin = require_role("platform-admin")
 
 
 @app.get("/health")
@@ -279,7 +280,7 @@ async def evaluation_runs(
 @app.post("/v1/admin/model-pricing", response_model=ModelPricingResponse, status_code=201)
 async def add_model_pricing(
     body: ModelPricingRequest,
-    _: Principal = Depends(require_role("platform-admin")),
+    _: Principal = Depends(platform_admin),
     session: AsyncSession = Depends(get_session),
 ) -> ModelPricingResponse:
     if body.effective_until and body.effective_until <= body.effective_from:

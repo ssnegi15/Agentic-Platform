@@ -16,7 +16,7 @@ def run(*command: str) -> None:
 
 
 def check() -> None:
-    if sys.version_info < (3, 13):
+    if sys.version_info < (3, 13):  # noqa: UP036 - also guard direct script execution
         raise SystemExit("Python 3.13 or newer is required.")
     missing = [
         key
