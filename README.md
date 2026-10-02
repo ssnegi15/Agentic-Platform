@@ -72,6 +72,8 @@ This runs on a temporary GitHub Actions runner, not your computer or the deploye
 
 The migration workflow is manual and serialized to avoid repeated or overlapping migration runs. The existing CI and deterministic evaluation workflows do not use this production database secret.
 
+If the migration log says `connect() got an unexpected keyword argument 'sslmode'` or `'channel_binding'`, confirm the selected branch includes the asyncpg URL compatibility fix in `src/agent_platform/db_url.py` and `migrations/env.py`, then rerun the workflow. The compatibility code maps `sslmode` to asyncpg's `ssl` option and removes the libpq-only `channel_binding` option; do not put either option into the database password.
+
 ### Where each secret belongs
 
 | Value | Store it here | Why |
