@@ -1,99 +1,120 @@
 # Agent Platform
 
-Agent Platform is a Python API for running AI agents. It uses Keycloak for sign-in, PostgreSQL with pgvector for data, and an OpenAI-compatible endpoint for model calls. GitHub Actions runs the project's checks and evaluation gate.
+Agent Platform is a Python 3.13+ FastAPI service. This guide deploys the API from GitHub to Render, uses Neon for PostgreSQL with pgvector, and uses Firebase Authentication for tokens. The goal is a small prototype footprint; free-tier quotas and terms can change, so check each provider's current dashboard and pricing before deployment. Free does not mean guaranteed always-on or zero cost.
 
-## Run locally
+## What runs where
 
-You need Python 3.13 or newer, [uv](https://docs.astral.sh/uv/), PostgreSQL with pgvector, and (for authenticated API requests) a Keycloak realm configured for this API.
+| Component | Service | Notes |
+| --- | --- | --- |
+| API | Render web service | One Docker service on the free plan; it may sleep when idle. |
+| PostgreSQL + pgvector | Neon | Use one project/branch and the pooled endpoint for the API. |
+| User authentication | Firebase Authentication | Managed service; no Keycloak server to host. |
+| Source and optional deployment migrations | GitHub | Existing Actions run CI/evaluations; a manual workflow applies database migrations. |
+| Model endpoint | Optional OpenAI-compatible provider | Model usage may incur separate charges. Leave unconfigured until needed. |
 
-1. Clone the repository and enter its directory.
-2. Install the project and development tools:
+Firebase Auth is managed by Google and is not an open-source replacement for Keycloak. It is the lower-operations choice here; this deployment no longer requires a Keycloak service or a second Keycloak database.
 
-   ```sh
-   uv sync --dev
+## Deploy step by step
+
+### 1. Create the Neon database
+
+1. Create a Neon account and one PostgreSQL project/branch.
+2. In the project's connection details, copy the **pooled** connection string for the API. Keep the Neon project in one region near the Render service.
+3. This application uses SQLAlchemy's `asyncpg` driver. Format the URL like this:
+
+   ```text
+   postgresql+asyncpg://<user>:<password>@<pooled-host>/<database>?ssl=require
    ```
 
-3. Create a PostgreSQL database and set up the connection and identity settings:
+   If Neon shows `postgresql://`, replace that scheme with `postgresql+asyncpg://`. If the URL query has `sslmode=require`, use `ssl=require` with this driver. Preserve any other provider-supplied connection parameters and URL-encode special characters in credentials.
+4. Keep the provider's **direct** connection string too. Use that direct URL for the one-time migration workflow; use the pooled URL for the running API.
 
-   ```sh
-   cp .env.example .env
+The initial migration creates the `vector` extension and application tables. The database role must be allowed to create that extension.
+
+### 2. Configure Firebase Authentication
+
+1. Create a Firebase project and note its **Project ID**.
+2. In **Authentication → Sign-in method**, enable the sign-in provider your client will use (for a basic prototype, Email/Password).
+3. Set the API token validation values using that exact Project ID:
+
+   ```text
+   OIDC_ISSUER_URL=https://securetoken.google.com/<firebase-project-id>
+   OIDC_AUDIENCE=<firebase-project-id>
+   OIDC_JWKS_URL=https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com
    ```
 
-   Edit `.env` and set `DATABASE_URL`, `OIDC_ISSUER_URL`, and `OIDC_AUDIENCE`. `DATABASE_URL` should use the `postgresql+asyncpg://` scheme. The first migration enables the PostgreSQL `vector` extension, so pgvector must be installed on the database server.
-4. Apply the database schema:
+   Firebase ID tokens are signed JWTs. Send an ID token from Firebase as `Authorization: Bearer <id-token>` to authenticated API routes. Your client obtains that token through Firebase Authentication; the API does not implement a login page.
+4. Most `/v1` endpoints accept an authenticated user token. `POST /v1/admin/model-pricing` additionally requires a `platform-admin` role. Firebase custom claims can carry that role; the API recognizes it under `realm_access.roles` or `resource_access.<client>.roles`. Do not grant admin claims to ordinary users.
 
-   ```sh
-   uv run python scripts/bootstrap.py migrate
+### 3. Run the one-time database migration from GitHub
+
+This runs on a temporary GitHub Actions runner, not your computer or the deployed API:
+
+1. In GitHub, open **Settings → Secrets and variables → Actions** and create the repository secret `MIGRATION_DATABASE_URL`. Set it to the **direct** Neon URL, formatted for asyncpg as above.
+2. Open **Actions → Migrate production database → Run workflow** and run it on the branch you intend to deploy.
+3. Confirm the workflow succeeds before deploying the API. Run it again only when a later code change adds a database migration.
+
+The migration workflow is manual and serialized to avoid repeated or overlapping migration runs. The existing CI and deterministic evaluation workflows do not use this production database secret.
+
+### 4. Deploy the API to Render
+
+1. Create a Render account and connect the GitHub repository.
+2. Choose **New → Blueprint** and select this repository. Render reads [`render.yaml`](render.yaml), builds the small API container from [`Dockerfile`](Dockerfile), and configures a single free web service.
+3. In the service's environment settings, set:
+
+   ```text
+   DATABASE_URL=<pooled Neon asyncpg URL>
+   OIDC_ISSUER_URL=https://securetoken.google.com/<firebase-project-id>
+   OIDC_AUDIENCE=<firebase-project-id>
    ```
 
-5. Start the API:
+   The Firebase JWKS URL and privacy-conscious telemetry defaults are already in the Blueprint. Do not put database passwords or API keys in the repository or `render.yaml`.
+4. Deploy. When the service is live, test:
 
-   ```sh
-   uv run uvicorn agent_platform.api.main:app --app-dir src --reload
+   ```text
+   https://<your-render-service>.onrender.com/health
+   https://<your-render-service>.onrender.com/ready
    ```
 
-The API is available at `http://127.0.0.1:8000`. Open `/docs` for interactive API documentation. `/health` checks that the API is running; `/ready` also checks its database connection.
+   `/health` verifies the process is responding; `/ready` also verifies database connectivity. Open `/docs` for the interactive API documentation.
 
-To run the included deterministic seed data (optional):
+   Once a client has signed in with Firebase and obtained an ID token, verify authentication with:
 
-```sh
-uv run python scripts/bootstrap.py seed
-```
+   ```sh
+   curl https://<your-render-service>.onrender.com/v1/me \
+     -H "Authorization: Bearer <firebase-id-token>"
+   ```
 
-## Configure external services
+### 5. Optional model provider
 
-### PostgreSQL with pgvector
-
-Install PostgreSQL and pgvector using the instructions for your operating system or hosting provider. Create a database and a database user, then set `DATABASE_URL` in `.env`, for example:
-
-```text
-DATABASE_URL=postgresql+asyncpg://<user>:<password>@localhost:5432/<database>
-```
-
-Run the migration command above after creating the database. The app does not install or start PostgreSQL for you.
-
-### Keycloak
-
-Create a realm and an OpenID Connect client for the API in your Keycloak instance. Configure tokens issued for this API to include its audience, and include any roles or groups your application uses. Set:
-
-```text
-OIDC_ISSUER_URL=https://<keycloak-host>/realms/<realm>
-OIDC_AUDIENCE=<api-audience>
-```
-
-The API uses the realm's standard JWKS endpoint to validate access tokens. Set `OIDC_JWKS_URL` in `.env` only if your realm uses a different endpoint. Authenticated API requests must include a Keycloak access token as a bearer token.
-
-### Model provider (optional)
-
-Agent runs need an OpenAI-compatible model endpoint. Set its base URL, API key (if required), and model name in `.env`:
+The API and authenticated non-agent endpoints can run without an LLM provider. To enable `POST /v1/agents/run`, add these values in Render's environment settings:
 
 ```text
 LLM_BASE_URL=https://<provider-host>/v1
-LLM_API_KEY=<provider-api-key>
+LLM_API_KEY=<provider-key-if-required>
 LLM_DEFAULT_MODEL=<model-name>
 ```
 
-The API uses these settings for `POST /v1/agents/run`. Hosted providers may charge for model usage; check the provider's pricing and usage limits.
+Choose a low-cost model and configure usage limits or billing alerts with the model provider where available. Hosting free tiers do not cap model-provider charges.
 
-## Run checks
+## Keep usage within limits
 
-Install the development dependencies with `uv sync --dev`, then run:
+- Keep one Render API service and one Neon project/branch; avoid preview environments and duplicate services.
+- The API uses one worker and caps its SQLAlchemy connection pool at two connections with no overflow.
+- Free web services may sleep when idle. Avoid uptime pingers, load tests, and frequent manual redeploys if conserving free usage matters.
+- Keep `TELEMETRY_CAPTURE_INPUTS` and `TELEMETRY_CAPTURE_OUTPUTS` set to `false` unless you have a clear need to store user/model content.
+- Leave model settings unset until needed. Track model-provider usage separately and set provider-side budgets where available.
+- Use platform alerts/usage dashboards. Provider quotas and free-plan features change; monitor them rather than assuming that a particular limit is permanent.
+- Store `MIGRATION_DATABASE_URL` in GitHub Actions secrets and runtime `DATABASE_URL` in Render's environment settings. They are different credentials/connection endpoints for different tasks.
 
-```sh
-uv run python scripts/bootstrap.py ci
-uv run python scripts/bootstrap.py eval
-```
+## GitHub workflows
 
-`ci` runs formatting checks, lint, type checking, and tests. The evaluation command runs the deterministic evaluation gate. Unit tests and deterministic evaluations do not require live Keycloak or a model provider. Database migrations and seed data do require a configured PostgreSQL database.
+- **Agent Platform CI** provisions a temporary PostgreSQL/pgvector service and runs migrations and project checks.
+- **Agent evaluations** runs the deterministic evaluation gate.
+- **Migrate production database** is a manual workflow that requires `MIGRATION_DATABASE_URL`.
 
-## GitHub Actions and Pages
+No Render deploy token is needed by GitHub Actions for this setup: connect the repository in Render and use its repository integration. GitHub Actions secrets are not automatically exposed to the running API.
 
-Pushes to `main` and pull requests run the workflows in `.github/workflows`: CI starts a temporary PostgreSQL/pgvector service and runs migrations and checks, while the evaluation workflow runs the deterministic quality gate. You can also start either workflow manually from the repository's **Actions** tab.
+## Documentation and local development
 
-GitHub Pages can publish the documentation as a static site; it cannot run this FastAPI application or provide PostgreSQL, Keycloak, or a model provider. To publish the documentation:
-
-1. Open the repository's **Settings → Pages**.
-2. Under **Build and deployment**, choose **Deploy from a branch**.
-3. Select the `main` branch and the `/docs` folder, then save.
-
-The documentation landing page is `docs/index.md`. The API and its external services must be run or hosted separately.
+GitHub Pages can serve the static files in [`docs/`](docs/), but it does not host the API or its services. See [`docs/architecture.md`](docs/architecture.md) for system boundaries. The API can also be run locally, but this guide focuses on the hosted deployment.
