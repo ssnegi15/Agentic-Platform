@@ -13,7 +13,12 @@ from agent_platform.config import get_settings
 
 @lru_cache(maxsize=4)
 def _engine(database_url: str) -> AsyncEngine:
-    return create_async_engine(database_url, pool_pre_ping=True)
+    return create_async_engine(
+        database_url,
+        pool_pre_ping=True,
+        pool_size=2,
+        max_overflow=0,
+    )
 
 
 @lru_cache(maxsize=4)
