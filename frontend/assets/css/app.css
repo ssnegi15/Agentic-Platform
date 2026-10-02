@@ -55,7 +55,9 @@ input:focus { border-color: rgba(169, 240, 203, .58); box-shadow: 0 0 0 3px rgba
 .status-heading .button { min-height: 35px; }
 .status-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 15px 0; border-top: 1px solid var(--line); color: #cbd4e0; font-size: 12px; }
 .status-row > span:first-child { display: flex; align-items: center; gap: 10px; }
+.status-controls { display: flex; align-items: center; gap: 10px; }
 .status-value { color: #aeb9c9; text-align: right; }
+.test-button { min-height: 32px; padding: 0 10px; font-size: 10px; }
 .status-indicator { width: 8px; height: 8px; border-radius: 50%; background: #8290a4; }
 .status-indicator.ok { background: var(--accent); box-shadow: 0 0 10px rgba(169, 240, 203, .35); }
 .status-indicator.error { background: #ff8686; box-shadow: 0 0 10px rgba(255, 134, 134, .25); }

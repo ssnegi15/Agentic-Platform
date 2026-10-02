@@ -12,9 +12,10 @@ const emailInput = document.querySelector("#email");
 const passwordInput = document.querySelector("#password");
 const userName = document.querySelector("#user-name");
 const userEmail = document.querySelector("#user-email");
-const refreshButton = document.querySelector("#refresh-status");
+const statusMessage = document.querySelector("#status-message");
 
 let idToken = "";
+const checkButtons = [...document.querySelectorAll("[data-test]")];
 
 function isConfigured() {
   return apiBaseUrl.startsWith("https://")
@@ -36,41 +37,45 @@ function setStatus(prefix, state, label) {
   document.querySelector(`#${prefix}-status`).textContent = label;
 }
 
-async function refreshStatus() {
-  refreshButton.disabled = true;
-  setStatus("api", "pending", "Checking…");
-  setStatus("database", "pending", "Checking…");
-  setStatus("auth", "pending", "Checking…");
+async function testService(service) {
+  const button = document.querySelector(`[data-test="${service}"]`);
+  button.disabled = true;
+  setStatus(service, "pending", "Checking…");
+  statusMessage.textContent = "";
 
-  const checks = await Promise.allSettled([
-    fetch(`${apiBaseUrl}/health`).then(responseJson),
-    fetch(`${apiBaseUrl}/ready`).then(responseJson),
-    fetch(`${apiBaseUrl}/v1/me`, {
-      headers: { Authorization: `Bearer ${idToken}` },
-    }).then(responseJson),
-  ]);
-
-  const [api, database, auth] = checks;
-  setStatus("api", api.status === "fulfilled" ? "ok" : "error",
-    api.status === "fulfilled" ? "Online" : "Unavailable");
-  setStatus("database", database.status === "fulfilled" ? "ok" : "error",
-    database.status === "fulfilled" ? "Connected" : "Unavailable");
-  setStatus("auth", auth.status === "fulfilled" ? "ok" : "error",
-    auth.status === "fulfilled" ? "Signed in" : "Token check failed");
-
-  if (auth.status === "fulfilled" && auth.value.username) {
-    userName.textContent = auth.value.username.split("@")[0] || "there";
-  } else if (
-    auth.status === "rejected"
-    && auth.reason.message === "A valid access token is required."
-  ) {
-    signOut();
-    signinMessage.textContent = "Your sign-in has expired. Please sign in again.";
+  const path = {
+    api: "/health",
+    database: "/ready",
+    auth: "/v1/me",
+  }[service];
+  try {
+    const options = service === "auth"
+      ? { headers: { Authorization: `Bearer ${idToken}` } }
+      : {};
+    const result = await responseJson(await fetch(`${apiBaseUrl}${path}`, options));
+    const state = service === "api" ? "Online" : service === "database" ? "Connected" : "Signed in";
+    setStatus(service, "ok", state);
+    if (service === "auth" && result.username) {
+      userName.textContent = result.username.split("@")[0] || "there";
+    }
+    statusMessage.textContent = `${serviceLabel(service)} check passed at ${new Date().toLocaleTimeString()}.`;
+  } catch (error) {
+    setStatus(service, "error", service === "auth" ? "Check failed" : "Unavailable");
+    if (service === "auth" && error.message === "A valid access token is required.") {
+      signOut();
+      signinMessage.textContent = "Your sign-in has expired. Please sign in again.";
+    } else if (service === "database" && error.message.includes("Failed to fetch")) {
+      statusMessage.textContent = "Database check failed. Verify the API CORS setting and service availability.";
+    } else {
+      statusMessage.textContent = `${serviceLabel(service)} check failed. Verify the service configuration and try again.`;
+    }
+  } finally {
+    button.disabled = false;
   }
+}
 
-  document.querySelector("#checked-at").textContent =
-    `Last checked ${new Date().toLocaleTimeString()}`;
-  refreshButton.disabled = false;
+function serviceLabel(service) {
+  return service === "api" ? "API" : service === "database" ? "Database" : "Authentication";
 }
 
 function signOut() {
@@ -82,12 +87,8 @@ function signOut() {
 
 if (isConfigured()) {
   signinButton.disabled = false;
-  for (const id of ["api-docs", "dashboard-docs"]) {
-    document.querySelector(`#${id}`).href = `${apiBaseUrl}/docs`;
-  }
-  document.querySelector("#health-link").href = `${apiBaseUrl}/health`;
 } else {
-  signinMessage.textContent = "Configure the API URL and Firebase web API key in docs/app-config.js, then publish the Pages site.";
+  signinMessage.textContent = "The site configuration is unavailable. Ask the repository administrator to configure the Pages deployment secrets.";
 }
 
 signinForm.addEventListener("submit", async (event) => {
@@ -115,7 +116,10 @@ signinForm.addEventListener("submit", async (event) => {
     passwordInput.value = "";
     signinView.hidden = true;
     welcomeView.hidden = false;
-    await refreshStatus();
+    for (const service of ["api", "database", "auth"]) {
+      setStatus(service, "pending", "Not tested");
+    }
+    statusMessage.textContent = "Test each service using its own button.";
   } catch (error) {
     const errors = {
       INVALID_LOGIN_CREDENTIALS: "Email or password is incorrect.",
@@ -132,6 +136,8 @@ signinForm.addEventListener("submit", async (event) => {
   }
 });
 
-refreshButton.addEventListener("click", refreshStatus);
 document.querySelector("#signout-button").addEventListener("click", signOut);
+for (const button of checkButtons) {
+  button.addEventListener("click", () => testService(button.dataset.test));
+}
 })();
