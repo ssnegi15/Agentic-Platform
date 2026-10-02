@@ -1,12 +1,12 @@
 # Agent Platform
 
-Agent Platform is a Python 3.13+ FastAPI backend deployed to Render, with a sign-in and status UI served as static files from GitHub Pages. It uses Neon for PostgreSQL with pgvector and Firebase Authentication for tokens. The UI does not run on Render, keeping the Render service focused on the API. Free-tier quotas and terms can change, so check provider pricing before deployment.
+Agent Platform is a Python 3.13+ FastAPI backend deployed to Render, with a sign-in and status UI served as static files from GitHub Pages. It uses Neon for PostgreSQL with pgvector and Firebase Authentication for tokens. The UI does not run on Render, keeping the Render service focused on the API. Review provider pricing and usage limits before deployment.
 
 ## What runs where
 
 | Component | Service | Notes |
 | --- | --- | --- |
-| API | Render web service | One Docker service; it may sleep on the free plan. |
+| API | Render web service | One Docker service. |
 | Sign-in/status UI | GitHub Pages | Static HTML, CSS, and JavaScript; no frontend server. |
 | PostgreSQL + pgvector | Neon | Use one project/branch and the pooled endpoint for the API. |
 | User authentication | Firebase Authentication | Managed service; no Keycloak server to host. |
@@ -50,17 +50,15 @@ The initial migration creates the `vector` extension and application tables. The
 
    The API verifies Firebase ID tokens using the issuer, audience, and Google's public signing keys.
 7. In Render's environment, set `CORS_ALLOW_ORIGINS=https://ssnegi15.github.io`. This lets the GitHub Pages UI call the API from browsers; do not use `*`. Save changes and let Render redeploy.
-8. Edit [`docs/app-config.js`](docs/app-config.js) and set the public frontend configuration:
+8. Add frontend configuration as GitHub Actions repository secrets. Open this repository on GitHub and go to **Settings → Secrets and variables → Actions → Repository secrets → New repository secret**. Add:
 
-   ```js
-   window.AGENT_PLATFORM_CONFIG = {
-     apiBaseUrl: "https://<your-render-service>.onrender.com",
-     firebaseApiKey: "<your-firebase-web-api-key>",
-   };
-   ```
+   | Name | Value |
+   | --- | --- |
+   | `PAGES_API_BASE_URL` | The Render API origin, such as `https://<your-render-service>.onrender.com` (no trailing slash). |
+   | `FIREBASE_WEB_API_KEY` | The Firebase Web API Key from step 5. |
 
-   These values are public, not secrets. Never put a database URL, model API key, or Firebase service-account private key here.
-9. Enable GitHub Pages: open **Repository → Settings → Pages**, select **Deploy from a branch**, choose `main` and `/docs`, then save. After publishing, open `https://ssnegi15.github.io/Agentic-Platform/`, sign in, and view API/database/authentication status. This page has no chat functionality.
+   These settings are ultimately delivered to the browser, so they are not private credentials. The API URL and Firebase key are kept out of the repository; the Pages workflow creates `frontend/assets/js/app-config.js` only in the deployment artifact. Never put database URLs, model API keys, or Firebase service-account private keys in frontend settings.
+9. Open **Repository → Settings → Pages**, set the source to **GitHub Actions**, and save. After deploying the API and adding both repository secrets, publish the UI using **Actions → Publish GitHub Pages UI → Run workflow**. The workflow also runs automatically when `frontend/` changes are pushed to `main`. Open `https://ssnegi15.github.io/Agentic-Platform/`, sign in, then use the separate **Test API**, **Test database**, and **Test sign-in** buttons. This page has no chat functionality.
 
    For a manual protected-API smoke test, you can request a token from Firebase's Identity Toolkit REST API using the test user's email/password and the Firebase Web API key. Send the request body as JSON to:
 
@@ -92,7 +90,7 @@ If the migration log says `connect() got an unexpected keyword argument 'sslmode
 | `DATABASE_URL` (pooled Neon URL) | Render Dashboard → your API service → **Environment → Add Environment Variable** | Read by the running API. Do not add it as a GitHub secret for this setup. |
 | `LLM_API_KEY` (only if enabling a model) | Render Dashboard → your API service → **Environment → Add Environment Variable** | Read by the running API. Do not add it to GitHub unless a future workflow specifically needs it. |
 | Firebase Project ID, `OIDC_ISSUER_URL`, `OIDC_AUDIENCE`, `OIDC_JWKS_URL`, and `CORS_ALLOW_ORIGINS` | Render service environment / `render.yaml` | Backend token-validation and browser-origin configuration. |
-| `apiBaseUrl` and `firebaseApiKey` | [`docs/app-config.js`](docs/app-config.js) | Public frontend configuration only; not private credentials. |
+| `PAGES_API_BASE_URL` and `FIREBASE_WEB_API_KEY` | GitHub repository → **Settings → Secrets and variables → Actions → Repository secrets** | Used by the Pages workflow to generate browser configuration at deployment time. These values are visible to site visitors after deployment and are not private credentials. |
 | Firebase service-account private key | Nowhere for this deployment | The API validates Firebase ID tokens using Google's public JWKS endpoint; it does not need a service-account private key. Never commit one. |
 
 In GitHub, create a secret from the **repository's** Settings page, not your account's settings. In Render, use the service's environment settings and mark actual credentials as secret if the dashboard offers that option. Never put secret values in `render.yaml`, source files, or workflow YAML. GitHub Actions secrets are not automatically passed to Render's running service.
@@ -127,11 +125,11 @@ In GitHub, create a secret from the **repository's** Settings page, not your acc
      -H "Authorization: Bearer <firebase-id-token>"
    ```
 
-   If Render stays at **Deploying**, open the service's **Events** page and the active deploy's **Logs** to distinguish an image-build failure from an application startup failure. A failed startup should show a Python traceback; check that the running commit contains the current Dockerfile and static-asset path in `src/agent_platform/api/main.py`. The container should listen on Render's injected `PORT` and pass its `/health` check. Redeploy only after correcting the reported failure; avoid repeated deploy attempts while a build is already active.
+   If Render stays at **Deploying**, open the service's **Events** page and the active deploy's **Logs** to distinguish an image-build failure from an application startup failure. A failed startup should show a Python traceback. The container should listen on Render's injected `PORT` and pass its `/health` check. Redeploy only after correcting the reported failure; avoid repeated deploy attempts while a build is already active.
 
 ### 5. Publish and browse the UI
 
-Configure [`docs/app-config.js`](docs/app-config.js) with the Render API URL and Firebase Web API Key, then publish `/docs` from branch `main` in **Repository → Settings → Pages**. The GitHub Pages UI URL is:
+Set the `PAGES_API_BASE_URL` and `FIREBASE_WEB_API_KEY` repository secrets described above. Set the Pages source to **GitHub Actions**, then run **Actions → Publish GitHub Pages UI → Run workflow**. Later changes under `frontend/` publish automatically when pushed to `main`. The GitHub Pages UI URL is:
 
 - `https://ssnegi15.github.io/Agentic-Platform/` — sign in and view the welcome/status page.
 
@@ -153,16 +151,16 @@ LLM_API_KEY=<provider-key-if-required>
 LLM_DEFAULT_MODEL=<model-name>
 ```
 
-Choose a low-cost model and configure usage limits or billing alerts with the model provider where available. Hosting free tiers do not cap model-provider charges.
+Choose a model that fits your budget and configure usage limits or billing alerts with the model provider where available. Hosting-provider limits do not cap model-provider charges.
 
 ## Keep usage within limits
 
 - Keep one Render API service and one Neon project/branch; avoid preview environments and duplicate services.
 - The API uses one worker and caps its SQLAlchemy connection pool at two connections with no overflow.
-- Free web services may sleep when idle. Avoid uptime pingers, load tests, and frequent manual redeploys if conserving free usage matters.
+- Avoid uptime pingers, unnecessary load tests, and frequent manual redeploys to limit resource use.
 - Keep `TELEMETRY_CAPTURE_INPUTS` and `TELEMETRY_CAPTURE_OUTPUTS` set to `false` unless you have a clear need to store user/model content.
 - Leave model settings unset until needed. Track model-provider usage separately and set provider-side budgets where available.
-- Use platform alerts/usage dashboards. Provider quotas and free-plan features change; monitor them rather than assuming that a particular limit is permanent.
+- Use platform alerts and usage dashboards; provider quotas and pricing can change.
 - Store `MIGRATION_DATABASE_URL` as a repository secret at **GitHub repository → Settings → Secrets and variables → Actions → Repository secrets**. Store the pooled runtime `DATABASE_URL` in the Render service's environment settings. They are different connection endpoints for different tasks.
 
 ## GitHub workflows
@@ -175,4 +173,17 @@ No Render deploy token is needed by GitHub Actions for this setup: connect the r
 
 ## Documentation and local development
 
-GitHub Pages serves the static UI and documentation from [`docs/`](docs/). Render hosts only the API; Neon and Firebase provide managed database and identity services. The Render API root returns service information; use `/docs` for its interactive API explorer. See [`docs/architecture.md`](docs/architecture.md) for system boundaries.
+GitHub Pages publishes the static UI from [`frontend/`](frontend/); [`docs/`](docs/) contains project documentation only. The frontend keeps its entry page at the root and groups static assets by type:
+
+```text
+frontend/
+├── index.html
+└── assets/
+    ├── css/
+    │   └── app.css
+    └── js/
+        ├── app.js
+        └── app-config.js  # generated by Actions; ignored by Git
+```
+
+Render hosts only the API; Neon and Firebase provide managed database and identity services. The Render API root returns service information; use `/docs` for its interactive API explorer. See [`docs/architecture.md`](docs/architecture.md) for system boundaries.

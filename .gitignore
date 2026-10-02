@@ -12,3 +12,4 @@ __pycache__/
 dist/
 build/
 LOCAL_README.md
+frontend/assets/js/app-config.js

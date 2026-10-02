@@ -1,0 +1,43 @@
+name: Publish GitHub Pages UI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/configure-pages@v5
+      - name: Generate Pages configuration from repository secrets
+        env:
+          PAGES_API_BASE_URL: ${{ secrets.PAGES_API_BASE_URL }}
+          FIREBASE_WEB_API_KEY: ${{ secrets.FIREBASE_WEB_API_KEY }}
+        run: |
+          if [ -z "$PAGES_API_BASE_URL" ] || [ -z "$FIREBASE_WEB_API_KEY" ]; then
+            echo "::error::Set PAGES_API_BASE_URL and FIREBASE_WEB_API_KEY in repository Actions secrets."
+            exit 1
+          fi
+          node -e 'const fs = require("node:fs"); const config = {apiBaseUrl: process.env.PAGES_API_BASE_URL, firebaseApiKey: process.env.FIREBASE_WEB_API_KEY}; fs.writeFileSync("frontend/assets/js/app-config.js", `window.AGENT_PLATFORM_CONFIG = ${JSON.stringify(config)};\n`);'
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -6,9 +6,9 @@
     <meta name="theme-color" content="#101827">
     <meta name="description" content="Agent Platform welcome page and service status.">
     <title>Agent Platform</title>
-    <link rel="stylesheet" href="./app.css">
-    <script src="./app-config.js"></script>
-    <script src="./app.js" defer></script>
+    <link rel="stylesheet" href="./assets/css/app.css">
+    <script src="./assets/js/app-config.js"></script>
+    <script src="./assets/js/app.js" defer></script>
   </head>
   <body>
     <main class="page">
@@ -17,7 +17,7 @@
           <span class="brand-mark" aria-hidden="true">A</span>
           <span>Agent Platform</span>
         </a>
-        <a id="api-docs" class="docs-link" href="#">API docs <span aria-hidden="true">↗</span></a>
+        <span class="docs-link">Agent Platform</span>
       </header>
       <section id="signin-view" class="signin-layout">
         <div class="intro">
@@ -49,30 +49,29 @@
         <section class="status-card" aria-labelledby="status-title">
           <div class="status-heading">
             <div><p class="eyebrow">SYSTEM STATUS</p><h2 id="status-title">Services</h2></div>
-            <button id="refresh-status" class="button secondary" type="button">Refresh</button>
           </div>
           <div class="status-row">
             <span><span id="api-dot" class="status-indicator pending"></span>API service</span>
-            <span id="api-status" class="status-value">Checking…</span>
+            <span class="status-controls"><span id="api-status" class="status-value">Not tested</span><button class="button secondary test-button" type="button" data-test="api">Test API</button></span>
           </div>
           <div class="status-row">
             <span><span id="database-dot" class="status-indicator pending"></span>Database</span>
-            <span id="database-status" class="status-value">Checking…</span>
+            <span class="status-controls"><span id="database-status" class="status-value">Not tested</span><button class="button secondary test-button" type="button" data-test="database">Test database</button></span>
           </div>
           <div class="status-row">
             <span><span id="auth-dot" class="status-indicator pending"></span>Authentication</span>
-            <span id="auth-status" class="status-value">Checking…</span>
+            <span class="status-controls"><span id="auth-status" class="status-value">Not tested</span><button class="button secondary test-button" type="button" data-test="auth">Test sign-in</button></span>
           </div>
-          <p id="checked-at" class="checked-at"></p>
+          <p id="status-message" class="checked-at" role="status" aria-live="polite"></p>
         </section>
         <div class="dashboard-actions">
-          <a id="dashboard-docs" class="button secondary" href="#">API documentation <span aria-hidden="true">↗</span></a>
+          <span class="note">Test each service separately.</span>
           <button id="signout-button" class="text-button" type="button">Sign out</button>
         </div>
       </section>
       <footer>
         <span><span class="status-dot" aria-hidden="true"></span> Agent Platform</span>
-        <a id="health-link" href="#">API health <span aria-hidden="true">↗</span></a>
+        <span>Service status available after sign-in</span>
       </footer>
     </main>
   </body>
