@@ -64,8 +64,19 @@
           </div>
           <p id="status-message" class="checked-at" role="status" aria-live="polite"></p>
         </section>
+        <section class="api-explorer" aria-labelledby="api-explorer-title">
+          <div class="status-heading">
+            <div>
+              <p class="eyebrow">API EXPLORER</p>
+              <h2 id="api-explorer-title">Available endpoints</h2>
+            </div>
+            <button id="reload-endpoints" class="button secondary" type="button">Reload endpoints</button>
+          </div>
+          <p id="api-explorer-message" class="note">Sign in to load API endpoints.</p>
+          <div id="endpoint-list" class="endpoint-list"></div>
+        </section>
         <div class="dashboard-actions">
-          <span class="note">Test each service separately.</span>
+          <span class="note">Run each endpoint separately. Protected endpoints use your current sign-in token.</span>
           <button id="signout-button" class="text-button" type="button">Sign out</button>
         </div>
       </section>

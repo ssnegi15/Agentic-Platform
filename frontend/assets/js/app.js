@@ -13,6 +13,8 @@ const passwordInput = document.querySelector("#password");
 const userName = document.querySelector("#user-name");
 const userEmail = document.querySelector("#user-email");
 const statusMessage = document.querySelector("#status-message");
+const endpointList = document.querySelector("#endpoint-list");
+const apiExplorerMessage = document.querySelector("#api-explorer-message");
 
 let idToken = "";
 const checkButtons = [...document.querySelectorAll("[data-test]")];
@@ -30,6 +32,178 @@ async function responseJson(response) {
     throw new Error(body?.error?.message || body?.detail || `Request failed (${response.status}).`);
   }
   return body;
+}
+
+function resolveSchema(schema, specification) {
+  if (schema?.$ref) {
+    const path = schema.$ref.replace(/^#\//, "").split("/");
+    return path.reduce((value, key) => value?.[key], specification) || {};
+  }
+  return schema || {};
+}
+
+function schemaExample(schema, specification) {
+  const resolved = resolveSchema(schema, specification);
+  if (resolved.example !== undefined) return resolved.example;
+  if (resolved.default !== undefined) return resolved.default;
+  if (resolved.enum?.length) return resolved.enum[0];
+  if (resolved.type === "object" || resolved.properties) {
+    return Object.fromEntries(
+      Object.entries(resolved.properties || {}).map(([key, value]) => [
+        key,
+        schemaExample(value, specification),
+      ]),
+    );
+  }
+  if (resolved.type === "array") return [];
+  if (resolved.type === "integer" || resolved.type === "number") return 0;
+  if (resolved.type === "boolean") return false;
+  return "";
+}
+
+function addEndpointField(container, label, name, value, fieldType = "text") {
+  const wrapper = document.createElement("label");
+  wrapper.className = "endpoint-field";
+  wrapper.textContent = label;
+  const input = document.createElement("input");
+  input.type = fieldType;
+  input.dataset.parameter = name;
+  input.value = value ?? "";
+  wrapper.append(input);
+  container.append(wrapper);
+}
+
+function renderEndpoint(path, method, operation, specification) {
+  const card = document.createElement("article");
+  card.className = "endpoint-card";
+
+  const heading = document.createElement("div");
+  heading.className = "endpoint-title";
+  const methodBadge = document.createElement("span");
+  methodBadge.className = `method-badge method-${method}`;
+  methodBadge.textContent = method.toUpperCase();
+  const route = document.createElement("code");
+  route.textContent = path;
+  heading.append(methodBadge, route);
+  card.append(heading);
+
+  if (operation.summary || operation.description) {
+    const description = document.createElement("p");
+    description.className = "endpoint-description";
+    description.textContent = operation.summary || operation.description;
+    card.append(description);
+  }
+
+  const inputs = document.createElement("div");
+  inputs.className = "endpoint-inputs";
+  for (const parameter of operation.parameters || []) {
+    addEndpointField(
+      inputs,
+      `${parameter.name}${parameter.required ? " (required)" : ""}`,
+      `${parameter.in}:${parameter.name}`,
+      parameter.example ?? parameter.schema?.default ?? "",
+    );
+  }
+
+  const requestBody = operation.requestBody;
+  const jsonBody = requestBody?.content?.["application/json"]?.schema;
+  let bodyInput;
+  if (jsonBody) {
+    const bodyLabel = document.createElement("label");
+    bodyLabel.className = "endpoint-body";
+    bodyLabel.textContent = "Request body (JSON)";
+    bodyInput = document.createElement("textarea");
+    bodyInput.spellcheck = false;
+    bodyInput.value = JSON.stringify(schemaExample(jsonBody, specification), null, 2);
+    bodyLabel.append(bodyInput);
+    inputs.append(bodyLabel);
+  }
+  if (inputs.childElementCount) card.append(inputs);
+
+  const actions = document.createElement("div");
+  actions.className = "endpoint-actions";
+  const callButton = document.createElement("button");
+  callButton.className = "button secondary";
+  callButton.type = "button";
+  callButton.textContent = "Call endpoint";
+  const result = document.createElement("pre");
+  result.className = "endpoint-result";
+  result.hidden = true;
+  result.setAttribute("aria-live", "polite");
+  actions.append(callButton);
+  card.append(actions, result);
+
+  callButton.addEventListener("click", async () => {
+    callButton.disabled = true;
+    result.hidden = false;
+    result.textContent = "Calling endpoint…";
+    try {
+      let requestPath = path;
+      const query = new URLSearchParams();
+      for (const input of inputs.querySelectorAll("[data-parameter]")) {
+        const [location, name] = input.dataset.parameter.split(":");
+        if (location === "path") {
+          requestPath = requestPath.replace(`{${name}}`, encodeURIComponent(input.value.trim()));
+        } else if (input.value !== "") {
+          query.set(name, input.value);
+        }
+      }
+      const queryString = query.toString();
+      const headers = {};
+      if (idToken) headers.Authorization = `Bearer ${idToken}`;
+      const requestOptions = { method: method.toUpperCase(), headers };
+      if (bodyInput) {
+        requestOptions.headers["Content-Type"] = "application/json";
+        requestOptions.body = JSON.stringify(JSON.parse(bodyInput.value));
+      }
+      const response = await fetch(
+        `${apiBaseUrl}${requestPath}${queryString ? `?${queryString}` : ""}`,
+        requestOptions,
+      );
+      const text = await response.text();
+      let responseBody;
+      try {
+        responseBody = text ? JSON.parse(text) : null;
+      } catch {
+        responseBody = text;
+      }
+      result.textContent = `HTTP ${response.status} ${response.statusText}\n\n${
+        typeof responseBody === "string" ? responseBody : JSON.stringify(responseBody, null, 2)
+      }`;
+    } catch (error) {
+      result.textContent = `Request error: ${error.message}`;
+    } finally {
+      callButton.disabled = false;
+    }
+  });
+  return card;
+}
+
+async function loadApiExplorer() {
+  const reloadButton = document.querySelector("#reload-endpoints");
+  reloadButton.disabled = true;
+  endpointList.replaceChildren();
+  apiExplorerMessage.textContent = "Loading API endpoints…";
+  try {
+    const specification = await responseJson(await fetch(`${apiBaseUrl}/openapi.json`));
+    let count = 0;
+    for (const [path, pathItem] of Object.entries(specification.paths || {})) {
+      if (path === "/") continue;
+      for (const method of ["get", "post", "put", "patch", "delete"]) {
+        const operation = pathItem[method];
+        if (!operation) continue;
+        endpointList.append(renderEndpoint(path, method, operation, specification));
+        count += 1;
+      }
+    }
+    apiExplorerMessage.textContent = count
+      ? `${count} endpoints loaded from the API specification.`
+      : "The API specification contains no callable endpoints.";
+  } catch (error) {
+    apiExplorerMessage.textContent = `Could not load endpoints: ${error.message}`;
+  } finally {
+    reloadButton.disabled = false;
+  }
 }
 
 function setStatus(prefix, state, label) {
@@ -120,6 +294,7 @@ signinForm.addEventListener("submit", async (event) => {
       setStatus(service, "pending", "Not tested");
     }
     statusMessage.textContent = "Test each service using its own button.";
+    await loadApiExplorer();
   } catch (error) {
     const errors = {
       INVALID_LOGIN_CREDENTIALS: "Email or password is incorrect.",
@@ -137,6 +312,7 @@ signinForm.addEventListener("submit", async (event) => {
 });
 
 document.querySelector("#signout-button").addEventListener("click", signOut);
+document.querySelector("#reload-endpoints").addEventListener("click", loadApiExplorer);
 for (const button of checkButtons) {
   button.addEventListener("click", () => testService(button.dataset.test));
 }
