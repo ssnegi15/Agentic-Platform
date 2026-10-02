@@ -31,7 +31,7 @@ def _jwks_client(url: str) -> PyJWKClient:
 def _unauthorized() -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="A valid Keycloak access token is required.",
+        detail="A valid access token is required.",
         headers={"WWW-Authenticate": "Bearer"},
     )
 

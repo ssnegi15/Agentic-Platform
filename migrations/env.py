@@ -6,6 +6,7 @@ from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from agent_platform.config import get_settings
+from agent_platform.db_url import asyncpg_compatible_url
 from agent_platform.models import Base
 
 config = context.config
@@ -19,7 +20,7 @@ def database_url() -> str:
     url = get_settings().database_url
     if not url:
         raise RuntimeError("DATABASE_URL must be configured before running migrations.")
-    return url
+    return asyncpg_compatible_url(url)
 
 
 def run_migrations_offline() -> None:
