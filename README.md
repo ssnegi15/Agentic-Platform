@@ -1,12 +1,13 @@
 # Agent Platform
 
-Agent Platform is a Python 3.13+ FastAPI service. This guide deploys the API from GitHub to Render, uses Neon for PostgreSQL with pgvector, and uses Firebase Authentication for tokens. The goal is a small prototype footprint; free-tier quotas and terms can change, so check each provider's current dashboard and pricing before deployment. Free does not mean guaranteed always-on or zero cost.
+Agent Platform is a Python 3.13+ FastAPI backend deployed to Render, with a sign-in and status UI served as static files from GitHub Pages. It uses Neon for PostgreSQL with pgvector and Firebase Authentication for tokens. The UI does not run on Render, keeping the Render service focused on the API. Free-tier quotas and terms can change, so check provider pricing before deployment.
 
 ## What runs where
 
 | Component | Service | Notes |
 | --- | --- | --- |
-| API | Render web service | One Docker service on the free plan; it may sleep when idle. |
+| API | Render web service | One Docker service; it may sleep on the free plan. |
+| Sign-in/status UI | GitHub Pages | Static HTML, CSS, and JavaScript; no frontend server. |
 | PostgreSQL + pgvector | Neon | Use one project/branch and the pooled endpoint for the API. |
 | User authentication | Firebase Authentication | Managed service; no Keycloak server to host. |
 | Source and optional deployment migrations | GitHub | Existing Actions run CI/evaluations; a manual workflow applies database migrations. |
@@ -35,9 +36,11 @@ The initial migration creates the `vector` extension and application tables. The
 
 1. Open the [Firebase Console](https://console.firebase.google.com/) and create a project. You can disable Google Analytics if you do not need it. In **Project settings → General**, copy the **Project ID** exactly; it is not the project display name.
 2. In **Build → Authentication → Get started → Sign-in method**, enable **Email/Password** for the simplest prototype. Save the change.
-3. For a quick test account, open **Authentication → Users → Add user**, enter an email and a strong password, and save. In a real app, provide a sign-up/sign-in screen using the Firebase client SDK instead of creating users manually.
-4. If you have a browser-based client, register a web app in **Project settings → General → Your apps → Add app → Web**. Use the Firebase client SDK configuration in that frontend. The Firebase Web API key is intended to identify the Firebase project in client apps; it is not a substitute for authentication and does not authorize access to this API. In **Authentication → Settings → Authorized domains**, add the exact domain where the frontend runs if Firebase requires it. Do not add the API's Render domain unless the frontend itself is served from that domain.
-5. In Render, open the API service and go to **Environment**. Add or verify the following variables, replacing the placeholder with the Project ID copied in step 1:
+3. In **Authentication → Settings → Authorized domains**, add `ssnegi15.github.io` (hostname only; no scheme or repository path).
+4. For a test account, open **Authentication → Users → Add user**, enter an email and a strong password, and save. Account creation is managed by the Firebase project administrator.
+5. Register a web app in **Project settings → General → Your apps → Add app → Web** if the project does not already have one. Copy its **Web API Key** from the Firebase web-app configuration. This is public client configuration, not an admin credential.
+   If you restrict this API key in Google Cloud Console, add the HTTP referrer `https://ssnegi15.github.io/*` and allow the Identity Toolkit API; otherwise browser sign-in may be rejected.
+6. In Render, open the API service and go to **Environment**. Add or verify the following variables, replacing the placeholder with the Project ID copied in step 1:
 
    ```text
    OIDC_ISSUER_URL=https://securetoken.google.com/<firebase-project-id>
@@ -45,21 +48,28 @@ The initial migration creates the `vector` extension and application tables. The
    OIDC_JWKS_URL=https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com
    ```
 
-   These are public project/token-validation settings, not secrets. Save the environment changes and let Render redeploy. Firebase ID tokens use the secure-token issuer and the Firebase Project ID as their audience; the API verifies their signature against Google's public signing keys.
-6. Your frontend signs the user in with Firebase Authentication and sends the resulting **ID token** to the API:
+   The API verifies Firebase ID tokens using the issuer, audience, and Google's public signing keys.
+7. In Render's environment, set `CORS_ALLOW_ORIGINS=https://ssnegi15.github.io`. This lets the GitHub Pages UI call the API from browsers; do not use `*`. Save changes and let Render redeploy.
+8. Edit [`docs/app-config.js`](docs/app-config.js) and set the public frontend configuration:
 
-   ```http
-   Authorization: Bearer <firebase-id-token>
+   ```js
+   window.AGENT_PLATFORM_CONFIG = {
+     apiBaseUrl: "https://<your-render-service>.onrender.com",
+     firebaseApiKey: "<your-firebase-web-api-key>",
+   };
    ```
 
-   The API does not provide a login or registration page. For a basic manual smoke test without a frontend, you can request a token from Firebase's Identity Toolkit REST API using the test user's email/password and the Firebase Web API key. Send the request body as JSON to:
+   These values are public, not secrets. Never put a database URL, model API key, or Firebase service-account private key here.
+9. Enable GitHub Pages: open **Repository → Settings → Pages**, select **Deploy from a branch**, choose `main` and `/docs`, then save. After publishing, open `https://ssnegi15.github.io/Agentic-Platform/`, sign in, and view API/database/authentication status. This page has no chat functionality.
+
+   For a manual protected-API smoke test, you can request a token from Firebase's Identity Toolkit REST API using the test user's email/password and the Firebase Web API key. Send the request body as JSON to:
 
    ```text
    https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=<firebase-web-api-key>
    ```
 
    Include `{"email":"<test-user-email>","password":"<test-user-password>","returnSecureToken":true}` as the JSON body. The response contains `idToken`; use that value as the bearer token when calling `GET https://<your-render-service>.onrender.com/v1/me`. Treat the ID token and test password as credentials: do not commit them, share them, or put them in a URL. Revoke/delete the test account when it is no longer needed.
-7. Most `/v1` routes require a valid Firebase ID token. `POST /v1/admin/model-pricing` additionally requires a `platform-admin` role. This API currently extracts roles from Keycloak-shaped `realm_access.roles` and `resource_access.<client>.roles` claims; ordinary Firebase ID tokens do not include those claims by default. Treat the admin endpoint as unavailable with a basic Firebase setup unless the API is extended to read a trusted Firebase custom role claim. Never let a client set its own admin claim.
+**API authorization note:** Most `/v1` routes require a valid Firebase ID token. `POST /v1/admin/model-pricing` additionally requires a `platform-admin` role. This API currently extracts roles from Keycloak-shaped `realm_access.roles` and `resource_access.<client>.roles` claims; ordinary Firebase ID tokens do not include those claims by default. Treat the admin endpoint as unavailable with a basic Firebase setup unless the API is extended to read a trusted Firebase custom role claim. Never let a client set its own admin claim.
 
 ### 3. Run the one-time database migration from GitHub
 
@@ -81,7 +91,8 @@ If the migration log says `connect() got an unexpected keyword argument 'sslmode
 | `MIGRATION_DATABASE_URL` (direct Neon URL) | GitHub repository → **Settings → Secrets and variables → Actions → Repository secrets → New repository secret** | Read only by the manually triggered migration workflow. |
 | `DATABASE_URL` (pooled Neon URL) | Render Dashboard → your API service → **Environment → Add Environment Variable** | Read by the running API. Do not add it as a GitHub secret for this setup. |
 | `LLM_API_KEY` (only if enabling a model) | Render Dashboard → your API service → **Environment → Add Environment Variable** | Read by the running API. Do not add it to GitHub unless a future workflow specifically needs it. |
-| Firebase Project ID, `OIDC_ISSUER_URL`, `OIDC_AUDIENCE`, and `OIDC_JWKS_URL` | Render service environment / `render.yaml` | These identify the Firebase project and public signing-key endpoint; they are configuration, not credentials. |
+| Firebase Project ID, `OIDC_ISSUER_URL`, `OIDC_AUDIENCE`, `OIDC_JWKS_URL`, and `CORS_ALLOW_ORIGINS` | Render service environment / `render.yaml` | Backend token-validation and browser-origin configuration. |
+| `apiBaseUrl` and `firebaseApiKey` | [`docs/app-config.js`](docs/app-config.js) | Public frontend configuration only; not private credentials. |
 | Firebase service-account private key | Nowhere for this deployment | The API validates Firebase ID tokens using Google's public JWKS endpoint; it does not need a service-account private key. Never commit one. |
 
 In GitHub, create a secret from the **repository's** Settings page, not your account's settings. In Render, use the service's environment settings and mark actual credentials as secret if the dashboard offers that option. Never put secret values in `render.yaml`, source files, or workflow YAML. GitHub Actions secrets are not automatically passed to Render's running service.
@@ -89,16 +100,17 @@ In GitHub, create a secret from the **repository's** Settings page, not your acc
 ### 4. Deploy the API to Render
 
 1. Create a Render account and connect the GitHub repository.
-2. Choose **New → Blueprint** and select this repository. Render reads [`render.yaml`](render.yaml), builds the small API container from [`Dockerfile`](Dockerfile), and configures a single free web service.
+2. Choose **New → Blueprint** and select this repository. Render reads [`render.yaml`](render.yaml), builds the small API container from [`Dockerfile`](Dockerfile), and configures one web service. The UI is not included in the Render container.
 3. In the service's environment settings, set:
 
    ```text
    DATABASE_URL=<pooled Neon asyncpg URL>
    OIDC_ISSUER_URL=https://securetoken.google.com/<firebase-project-id>
    OIDC_AUDIENCE=<firebase-project-id>
+   CORS_ALLOW_ORIGINS=https://ssnegi15.github.io
    ```
 
-   The Firebase JWKS URL and privacy-conscious telemetry defaults are already in the Blueprint. Do not put database passwords or API keys in the repository or `render.yaml`.
+   The Firebase JWKS URL and privacy-conscious telemetry defaults are already in the Blueprint. CORS must allow only the GitHub Pages origin, not `*`. Do not put database passwords or model API keys in the repository or `render.yaml`.
 4. Deploy. When the service is live, test:
 
    ```text
@@ -115,7 +127,23 @@ In GitHub, create a secret from the **repository's** Settings page, not your acc
      -H "Authorization: Bearer <firebase-id-token>"
    ```
 
-### 5. Optional model provider
+   If Render stays at **Deploying**, open the service's **Events** page and the active deploy's **Logs** to distinguish an image-build failure from an application startup failure. A failed startup should show a Python traceback; check that the running commit contains the current Dockerfile and static-asset path in `src/agent_platform/api/main.py`. The container should listen on Render's injected `PORT` and pass its `/health` check. Redeploy only after correcting the reported failure; avoid repeated deploy attempts while a build is already active.
+
+### 5. Publish and browse the UI
+
+Configure [`docs/app-config.js`](docs/app-config.js) with the Render API URL and Firebase Web API Key, then publish `/docs` from branch `main` in **Repository → Settings → Pages**. The GitHub Pages UI URL is:
+
+- `https://ssnegi15.github.io/Agentic-Platform/` — sign in and view the welcome/status page.
+
+The API endpoints remain on Render:
+
+- `https://<your-render-service>.onrender.com/docs` — interactive Swagger API browser. Use **Authorize** and enter a Firebase ID token to try protected endpoints.
+- `https://<your-render-service>.onrender.com/health` — checks that the API process responds.
+- `https://<your-render-service>.onrender.com/ready` — checks that the API can also connect to Neon.
+
+The UI calls Render directly from the browser. If sign-in works but service statuses show unavailable, confirm Render's `CORS_ALLOW_ORIGINS` exactly matches `https://ssnegi15.github.io`. Create users under Firebase **Authentication → Users**. The agent-run endpoint remains API-only and requires `LLM_BASE_URL` and `LLM_DEFAULT_MODEL`.
+
+### 6. Optional model provider
 
 The API and authenticated non-agent endpoints can run without an LLM provider. To enable `POST /v1/agents/run`, add these values in Render's environment settings:
 
@@ -147,4 +175,4 @@ No Render deploy token is needed by GitHub Actions for this setup: connect the r
 
 ## Documentation and local development
 
-GitHub Pages can serve the static files in [`docs/`](docs/), but it does not host the API or its services. See [`docs/architecture.md`](docs/architecture.md) for system boundaries. The API can also be run locally, but this guide focuses on the hosted deployment.
+GitHub Pages serves the static UI and documentation from [`docs/`](docs/). Render hosts only the API; Neon and Firebase provide managed database and identity services. The Render API root returns service information; use `/docs` for its interactive API explorer. See [`docs/architecture.md`](docs/architecture.md) for system boundaries.

@@ -18,6 +18,8 @@ services:
         sync: false
       - key: OIDC_JWKS_URL
         value: https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com
+      - key: CORS_ALLOW_ORIGINS
+        value: https://ssnegi15.github.io
       - key: TELEMETRY_CAPTURE_INPUTS
         value: "false"
       - key: TELEMETRY_CAPTURE_OUTPUTS

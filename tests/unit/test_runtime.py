@@ -3,6 +3,7 @@ from typing import Any
 
 import pytest
 
+from agent_platform.agents.assistant import AssistantAgent
 from agent_platform.agents.runtime import AgentRequest, AgentResponse, AgentRuntime, RunContext
 from agent_platform.config import Settings
 from agent_platform.llm.base import LLMMessage, LLMRequest, LLMResponse, TokenUsage
@@ -10,7 +11,11 @@ from agent_platform.telemetry.base import Span, Trace
 
 
 class FakeProvider:
+    def __init__(self) -> None:
+        self.requests: list[LLMRequest] = []
+
     async def complete(self, request: LLMRequest) -> LLMResponse:
+        self.requests.append(request)
         return LLMResponse(
             provider="test",
             model=request.model,
@@ -80,3 +85,30 @@ async def test_runtime_persists_trace_hierarchy_and_llm_call() -> None:
     )
     assert telemetry.finished == [(trace_id, "ok", None)]
     assert len(telemetry.llm_calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_assistant_receives_conversation_history() -> None:
+    provider = FakeProvider()
+    runtime = AgentRuntime(
+        provider,
+        FakeTelemetry(),
+        Settings(environment="test", application_version="test"),
+    )
+
+    await runtime.run(
+        AssistantAgent("test", "test-model"),
+        AgentRequest(
+            "follow up",
+            history=[
+                LLMMessage("user", "first question"),
+                LLMMessage("assistant", "first answer"),
+            ],
+        ),
+    )
+
+    assert provider.requests[0].messages == [
+        LLMMessage("user", "first question"),
+        LLMMessage("assistant", "first answer"),
+        LLMMessage("user", "follow up"),
+    ]
