@@ -4,6 +4,7 @@ from typing import Any
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -21,6 +22,7 @@ from agent_platform.api.schemas import (
 from agent_platform.auth import Principal, current_principal, require_role
 from agent_platform.config import get_settings
 from agent_platform.db import dispose_engine, get_session, session_factory
+from agent_platform.llm.base import LLMMessage
 from agent_platform.llm.openai_compatible import OpenAICompatibleProvider
 from agent_platform.models import (
     EvaluationRun,
@@ -45,6 +47,27 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="Agent Platform", version=__version__, lifespan=lifespan)
 platform_admin = require_role("platform-admin")
+cors_origins = [
+    origin.strip()
+    for origin in get_settings().cors_allow_origins.split(",")
+    if origin.strip()
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
+)
+
+
+@app.get("/", include_in_schema=False)
+async def root() -> dict[str, str]:
+    return {
+        "service": "Agent Platform API",
+        "docs": "/docs",
+        "health": "/health",
+    }
 
 
 @app.get("/health")
@@ -98,6 +121,7 @@ async def run_agent(
                 message=body.message,
                 user_id=principal.subject,
                 session_id=body.session_id,
+                history=[LLMMessage(role=item.role, content=item.content) for item in body.history],
             ),
         )
     except Exception as error:

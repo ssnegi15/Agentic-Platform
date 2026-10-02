@@ -5,7 +5,7 @@ from typing import Any, Protocol
 from uuid import uuid4
 
 from agent_platform.config import Settings
-from agent_platform.llm.base import LLMProvider, LLMRequest, LLMResponse
+from agent_platform.llm.base import LLMMessage, LLMProvider, LLMRequest, LLMResponse
 from agent_platform.telemetry.base import Span, Telemetry, Trace
 from agent_platform.tools.base import Tool
 
@@ -16,6 +16,7 @@ class AgentRequest:
     user_id: str | None = None
     session_id: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    history: list[LLMMessage] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

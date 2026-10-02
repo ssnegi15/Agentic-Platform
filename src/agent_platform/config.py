@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     oidc_audience: str | None = None
     oidc_jwks_url: str | None = None
     oidc_groups_claim: str = "groups"
+    cors_allow_origins: str = "https://ssnegi15.github.io"
     llm_base_url: str | None = None
     llm_api_key: str | None = None
     llm_default_model: str | None = None

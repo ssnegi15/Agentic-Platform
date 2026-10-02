@@ -15,7 +15,10 @@ class AssistantAgent:
             self._provider_name,
             LLMRequest(
                 model=self._model,
-                messages=[LLMMessage(role="user", content=request.message)],
+                messages=[
+                    *request.history,
+                    LLMMessage(role="user", content=request.message),
+                ],
                 metadata={"prompt_version": self.prompt_version},
             ),
         )
